@@ -1,0 +1,2013 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Aegis | Multiplayer In-Game Cheat Detection System</title>
+    <!-- Tailwind CSS with custom configuration -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            dark: '#070b14',
+                            card: '#0f172a',
+                            border: 'rgba(99, 102, 241, 0.15)',
+                            primary: '#6366f1',
+                            secondary: '#a855f7',
+                            cyan: '#06b6d4',
+                            accent: '#3b82f6'
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'system-ui', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace']
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- Font Awesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+    <!-- Chart.js for visualization graphs -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- React & Babel Standalone for seamless single-command execution -->
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <style>
+        body {
+            background-color: #070b14;
+            color: #f1f5f9;
+            font-family: 'Inter', sans-serif;
+            overflow-x: hidden;
+        }
+        /* Custom scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #0f172a;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #312e81;
+            border-radius: 9999px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #6366f1;
+        }
+        .cyber-glow {
+            box-shadow: 0 0 25px rgba(99, 102, 241, 0.25);
+        }
+        .cyber-glow-cyan {
+            box-shadow: 0 0 25px rgba(6, 182, 212, 0.25);
+        }
+        .cyber-glow-red {
+            box-shadow: 0 0 25px rgba(239, 68, 68, 0.25);
+        }
+        /* Target Range styling */
+        .target-box {
+            transition: transform 0.1s ease, box-shadow 0.1s ease;
+        }
+        .target-box:active {
+            transform: scale(0.92);
+        }
+    </style>
+</head>
+<body class="bg-[#070b14] text-slate-100 min-h-screen">
+    <div id="root"></div>
+
+    <!-- React Application Script -->
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
+
+        // =========================================================
+        // MAIN APP COMPONENT
+        // =========================================================
+        function App() {
+            // Authentication state
+            const [currentUser, setCurrentUser] = useState(null);
+            const [authLoading, setAuthLoading] = useState(true);
+
+            // Active View Navigation
+            // 'lobby', 'gameplay', 'dashboard', 'moderator', 'model'
+            const [activeTab, setActiveTab] = useState('lobby');
+
+            // Global Notification Toast
+            const [toast, setToast] = useState(null);
+
+            const showToast = (message, type = 'info') => {
+                setToast({ message, type });
+                setTimeout(() => setToast(null), 4000);
+            };
+
+            // Check session on mount
+            useEffect(() => {
+                fetch('/api/auth/me')
+                    .then(res => res.json())
+                    .then(data => {
+                        if (data.status === 'authenticated') {
+                            setCurrentUser(data.user);
+                        }
+                    })
+                    .catch(err => console.error("Auth check failed:", err))
+                    .finally(() => setAuthLoading(false));
+            }, []);
+
+            const handleLogout = async () => {
+                try {
+                    await fetch('/api/auth/logout', { method: 'POST' });
+                    setCurrentUser(null);
+                    showToast('Logged out successfully', 'info');
+                } catch (e) {
+                    console.error(e);
+                }
+            };
+
+            if (authLoading) {
+                return (
+                    <div className="flex items-center justify-center min-h-screen bg-[#070b14]">
+                        <div className="text-center">
+                            <div className="w-16 h-16 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+                            <p className="text-indigo-400 font-mono tracking-widest text-sm uppercase">Initializing Aegis Anti-Cheat Core...</p>
+                        </div>
+                    </div>
+                );
+            }
+
+            return (
+                <div className="flex h-screen overflow-hidden bg-[#070b14]">
+                    {/* Toast Alert */}
+                    {toast && (
+                        <div className={`fixed top-5 right-5 z-50 flex items-center gap-3 px-5 py-3 rounded-xl border shadow-2xl backdrop-blur-md transition-all duration-300 ${
+                            toast.type === 'error' ? 'bg-red-950/80 border-red-500 text-red-200' :
+                            toast.type === 'success' ? 'bg-emerald-950/80 border-emerald-500 text-emerald-200' :
+                            toast.type === 'warning' ? 'bg-amber-950/80 border-amber-500 text-amber-200' :
+                            'bg-indigo-950/80 border-indigo-500 text-indigo-200'
+                        }`}>
+                            <i className={`fa-solid ${
+                                toast.type === 'error' ? 'fa-triangle-exclamation' :
+                                toast.type === 'success' ? 'fa-circle-check' :
+                                toast.type === 'warning' ? 'fa-shield-halved' : 'fa-circle-info'
+                            }`}></i>
+                            <span className="text-sm font-medium">{toast.message}</span>
+                            <button onClick={() => setToast(null)} className="ml-2 hover:opacity-75">
+                                <i className="fa-solid fa-xmark text-xs"></i>
+                            </button>
+                        </div>
+                    )}
+
+                    {/* Left Sidebar */}
+                    <Sidebar 
+                        activeTab={activeTab} 
+                        setActiveTab={setActiveTab} 
+                        currentUser={currentUser} 
+                        onLogout={handleLogout}
+                    />
+
+                    {/* Main Content Area */}
+                    <div className="flex-1 flex flex-col overflow-y-auto">
+                        {/* Top Header */}
+                        <Header 
+                            currentUser={currentUser} 
+                            setCurrentUser={setCurrentUser} 
+                            showToast={showToast}
+                        />
+
+                        {/* View Router */}
+                        <main className="flex-1 p-6 lg:p-8 max-w-7xl w-full mx-auto">
+                            {activeTab === 'lobby' && (
+                                <LobbyView 
+                                    currentUser={currentUser} 
+                                    showToast={showToast} 
+                                    onGameCompleted={() => setActiveTab('dashboard')} 
+                                />
+                            )}
+                            {activeTab === 'gameplay' && (
+                                <TargetRangeView 
+                                    currentUser={currentUser} 
+                                    showToast={showToast} 
+                                    onEvaluated={() => setActiveTab('dashboard')}
+                                />
+                            )}
+                            {activeTab === 'dashboard' && (
+                                <DetectionDashboardView 
+                                    showToast={showToast} 
+                                    onSwitchToModerator={() => setActiveTab('moderator')}
+                                />
+                            )}
+                            {activeTab === 'moderator' && (
+                                <ModeratorView 
+                                    currentUser={currentUser} 
+                                    showToast={showToast} 
+                                />
+                            )}
+                            {activeTab === 'model' && (
+                                <ModelAnalyticsView showToast={showToast} />
+                            )}
+                        </main>
+                    </div>
+                </div>
+            );
+        }
+
+        // =========================================================
+        // SIDEBAR COMPONENT
+        // =========================================================
+        function Sidebar({ activeTab, setActiveTab, currentUser, onLogout }) {
+            const navItems = [
+                { id: 'lobby', label: 'Multiplayer Lobby', icon: 'fa-gamepad', desc: 'Join rooms & 5-player start' },
+                { id: 'gameplay', label: 'Target Reflex Range', icon: 'fa-crosshairs', desc: 'Interactive shooting simulator' },
+                { id: 'dashboard', label: 'Live Detection Center', icon: 'fa-chart-pie', desc: '4 Graphs & ML Predictions' },
+                { id: 'moderator', label: 'Moderator Review', icon: 'fa-user-shield', desc: 'Human-in-the-loop audit' },
+                { id: 'model', label: 'ML Model Analytics', icon: 'fa-brain', desc: 'Random Forest benchmark & features' },
+            ];
+
+            return (
+                <aside className="w-72 bg-[#0c1222] border-r border-indigo-950/40 flex flex-col justify-between p-5 select-none">
+                    <div>
+                        {/* Branding */}
+                        <div className="flex items-center gap-3 px-3 py-4 mb-6">
+                            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 via-purple-600 to-cyan-400 flex items-center justify-center text-white text-xl font-black shadow-lg shadow-indigo-500/30">
+                                <i className="fa-solid fa-shield-halved"></i>
+                            </div>
+                            <div>
+                                <h1 className="font-extrabold text-base tracking-tight bg-gradient-to-r from-indigo-300 via-purple-200 to-cyan-300 bg-clip-text text-transparent">
+                                    AEGIS ANTI-CHEAT
+                                </h1>
+                                <p className="text-[11px] font-mono text-indigo-400/80 uppercase tracking-widest">Multiplayer ML Engine</p>
+                            </div>
+                        </div>
+
+                        {/* Navigation Links */}
+                        <nav className="space-y-1.5">
+                            {navItems.map(item => {
+                                const isActive = activeTab === item.id;
+                                return (
+                                    <button
+                                        key={item.id}
+                                        onClick={() => setActiveTab(item.id)}
+                                        className={`w-full flex items-center gap-3.5 px-4 py-3 rounded-xl text-left transition-all duration-200 ${
+                                            isActive
+                                                ? 'bg-gradient-to-r from-indigo-600/30 to-purple-600/20 text-white border border-indigo-500/40 shadow-lg shadow-indigo-950/50'
+                                                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60'
+                                        }`}
+                                    >
+                                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm ${
+                                            isActive ? 'bg-indigo-600 text-white' : 'bg-slate-800/80 text-slate-400'
+                                        }`}>
+                                            <i className={`fa-solid ${item.icon}`}></i>
+                                        </div>
+                                        <div className="flex-1 overflow-hidden">
+                                            <div className="font-semibold text-sm leading-tight">{item.label}</div>
+                                            <div className="text-[11px] text-slate-500 truncate mt-0.5">{item.desc}</div>
+                                        </div>
+                                        {isActive && <div className="w-1.5 h-1.5 rounded-full bg-cyan-400 shadow-[0_0_8px_#22d3ee]"></div>}
+                                    </button>
+                                );
+                            })}
+                        </nav>
+                    </div>
+
+                    {/* User Profile Footer */}
+                    <div className="pt-4 border-t border-slate-800/80">
+                        {currentUser ? (
+                            <div className="bg-slate-900/90 rounded-2xl p-3 border border-indigo-950/60">
+                                <div className="flex items-center gap-3">
+                                    <div 
+                                        className="w-10 h-10 rounded-xl flex items-center justify-center text-white font-bold text-sm shadow-md"
+                                        style={{ backgroundColor: currentUser.avatar_color || '#6366f1' }}
+                                    >
+                                        {currentUser.username.substring(0, 2).toUpperCase()}
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <div className="text-sm font-bold text-slate-200 truncate">{currentUser.username}</div>
+                                        <div className="flex items-center gap-1.5 mt-0.5">
+                                            <span className={`inline-block w-2 h-2 rounded-full ${currentUser.role === 'moderator' ? 'bg-purple-400' : 'bg-emerald-400'}`}></span>
+                                            <span className="text-[11px] font-mono capitalize text-slate-400">{currentUser.role}</span>
+                                        </div>
+                                    </div>
+                                    <button 
+                                        onClick={onLogout}
+                                        title="Sign out"
+                                        className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-red-400 hover:bg-red-950/40 transition"
+                                    >
+                                        <i className="fa-solid fa-arrow-right-from-bracket text-xs"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="text-center p-3 text-xs text-slate-500 font-mono">
+                                Guest Session (Sign in above)
+                            </div>
+                        )}
+                    </div>
+                </aside>
+            );
+        }
+
+        // =========================================================
+        // TOP HEADER COMPONENT (WITH LOGIN / REGISTER MODAL)
+        // =========================================================
+        function Header({ currentUser, setCurrentUser, showToast }) {
+            const [showAuthModal, setShowAuthModal] = useState(false);
+            const [authMode, setAuthMode] = useState('login'); // 'login' or 'register'
+            const [username, setUsername] = useState('');
+            const [password, setPassword] = useState('');
+            const [role, setRole] = useState('player');
+            const [submitting, setSubmitting] = useState(false);
+
+            const handleAuth = async (e) => {
+                e.preventDefault();
+                setSubmitting(true);
+                const endpoint = authMode === 'login' ? '/api/auth/login' : '/api/auth/register';
+                try {
+                    const res = await fetch(endpoint, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ username, password, role })
+                    });
+                    const data = await res.json();
+                    if (data.status === 'success') {
+                        setCurrentUser(data.user);
+                        setShowAuthModal(false);
+                        showToast(`Welcome back, ${data.user.username}!`, 'success');
+                        setUsername('');
+                        setPassword('');
+                    } else {
+                        showToast(data.message || 'Authentication error', 'error');
+                    }
+                } catch (err) {
+                    showToast('Network error during authentication', 'error');
+                } finally {
+                    setSubmitting(false);
+                }
+            };
+
+            const fillDemoAccount = (u, p) => {
+                setUsername(u);
+                setPassword(p);
+            };
+
+            return (
+                <header className="h-16 border-b border-indigo-950/40 bg-[#090e1a]/80 backdrop-blur-md px-8 flex items-center justify-between sticky top-0 z-30">
+                    <div className="flex items-center gap-3">
+                        <span className="flex h-2.5 w-2.5 relative">
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+                        </span>
+                        <span className="text-xs font-mono font-medium text-slate-400">
+                            Server Status: <strong className="text-emerald-400">Online (Random Forest ML Active)</strong>
+                        </span>
+                    </div>
+
+                    <div className="flex items-center gap-4">
+                        {currentUser ? (
+                            <div className="flex items-center gap-3">
+                                <div className="text-right hidden sm:block">
+                                    <div className="text-xs text-slate-400">Signed in as</div>
+                                    <div className="text-sm font-bold text-indigo-300">{currentUser.username}</div>
+                                </div>
+                                <div 
+                                    className="w-9 h-9 rounded-xl flex items-center justify-center font-bold text-white shadow-md text-sm"
+                                    style={{ backgroundColor: currentUser.avatar_color || '#6366f1' }}
+                                >
+                                    {currentUser.username.substring(0, 2).toUpperCase()}
+                                </div>
+                            </div>
+                        ) : (
+                            <button
+                                onClick={() => setShowAuthModal(true)}
+                                className="px-5 py-2 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-semibold text-sm shadow-lg shadow-indigo-600/30 transition flex items-center gap-2"
+                            >
+                                <i className="fa-solid fa-right-to-bracket text-xs"></i>
+                                <span>Sign In / Register</span>
+                            </button>
+                        )}
+                    </div>
+
+                    {/* Auth Modal */}
+                    {showAuthModal && (
+                        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4">
+                            <div className="bg-[#0f172a] border border-indigo-500/30 w-full max-w-md rounded-2xl p-6 shadow-2xl relative cyber-glow">
+                                <button 
+                                    onClick={() => setShowAuthModal(false)}
+                                    className="absolute top-5 right-5 text-slate-400 hover:text-white"
+                                >
+                                    <i className="fa-solid fa-xmark text-lg"></i>
+                                </button>
+
+                                <div className="text-center mb-6">
+                                    <div className="w-12 h-12 rounded-xl bg-indigo-600/20 border border-indigo-500/40 flex items-center justify-center text-indigo-400 text-xl mx-auto mb-3">
+                                        <i className="fa-solid fa-shield-halved"></i>
+                                    </div>
+                                    <h2 className="text-xl font-extrabold text-white">
+                                        {authMode === 'login' ? 'Sign In to Aegis' : 'Create Player Account'}
+                                    </h2>
+                                    <p className="text-xs text-slate-400 mt-1">Multiplayer In-Game Anti-Cheat Authentication</p>
+                                </div>
+
+                                {/* Mode Switch Tabs */}
+                                <div className="flex bg-slate-900 rounded-xl p-1 mb-5 border border-slate-800">
+                                    <button 
+                                        onClick={() => setAuthMode('login')}
+                                        className={`flex-1 py-1.5 rounded-lg text-xs font-semibold transition ${authMode === 'login' ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:text-white'}`}
+                                    >
+                                        Sign In
+                                    </button>
+                                    <button 
+                                        onClick={() => setAuthMode('register')}
+                                        className={`flex-1 py-1.5 rounded-lg text-xs font-semibold transition ${authMode === 'register' ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:text-white'}`}
+                                    >
+                                        Register
+                                    </button>
+                                </div>
+
+                                <form onSubmit={handleAuth} className="space-y-4">
+                                    <div>
+                                        <label className="block text-xs font-medium text-slate-300 mb-1.5">Username</label>
+                                        <div className="relative">
+                                            <input 
+                                                type="text"
+                                                value={username}
+                                                onChange={e => setUsername(e.target.value)}
+                                                placeholder="e.g. player1 or moderator1"
+                                                required
+                                                className="w-full bg-slate-900/90 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition"
+                                            />
+                                            <i className="fa-solid fa-user absolute right-3.5 top-3.5 text-slate-500 text-xs"></i>
+                                        </div>
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-xs font-medium text-slate-300 mb-1.5">Password</label>
+                                        <div className="relative">
+                                            <input 
+                                                type="password"
+                                                value={password}
+                                                onChange={e => setPassword(e.target.value)}
+                                                placeholder="••••••••"
+                                                required
+                                                className="w-full bg-slate-900/90 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition"
+                                            />
+                                            <i className="fa-solid fa-lock absolute right-3.5 top-3.5 text-slate-500 text-xs"></i>
+                                        </div>
+                                    </div>
+
+                                    {authMode === 'register' && (
+                                        <div>
+                                            <label className="block text-xs font-medium text-slate-300 mb-1.5">Account Role</label>
+                                            <select 
+                                                value={role}
+                                                onChange={e => setRole(e.target.value)}
+                                                className="w-full bg-slate-900/90 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-indigo-500 transition"
+                                            >
+                                                <option value="player">Player (Lobby & Shooting Range)</option>
+                                                <option value="moderator">Moderator (Forensic Review Center)</option>
+                                            </select>
+                                        </div>
+                                    )}
+
+                                    <button 
+                                        type="submit"
+                                        disabled={submitting}
+                                        className="w-full py-3 rounded-xl bg-gradient-to-r from-indigo-600 via-purple-600 to-indigo-600 hover:opacity-95 text-white font-bold text-sm shadow-lg shadow-indigo-600/30 transition disabled:opacity-50"
+                                    >
+                                        {submitting ? 'Authenticating...' : (authMode === 'login' ? 'Sign In' : 'Create Account')}
+                                    </button>
+                                </form>
+
+                                {/* Demo quick credentials clicker */}
+                                <div className="mt-5 p-3 rounded-xl bg-indigo-950/20 border border-indigo-900/40 text-left">
+                                    <div className="text-[11px] font-mono text-indigo-400 font-bold mb-1.5 flex items-center gap-1.5">
+                                        <i className="fa-solid fa-bolt"></i> Demo Quick Login Accounts:
+                                    </div>
+                                    <div className="flex flex-wrap gap-2 text-[11px]">
+                                        <button 
+                                            type="button" 
+                                            onClick={() => fillDemoAccount('player1', 'password123')}
+                                            className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-indigo-200 border border-slate-700"
+                                        >
+                                            👤 player1 (Host)
+                                        </button>
+                                        <button 
+                                            type="button" 
+                                            onClick={() => fillDemoAccount('player2', 'password123')}
+                                            className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-cyan-200 border border-slate-700"
+                                        >
+                                            👤 player2
+                                        </button>
+                                        <button 
+                                            type="button" 
+                                            onClick={() => fillDemoAccount('moderator1', 'password123')}
+                                            className="px-2.5 py-1 rounded bg-purple-900/40 hover:bg-purple-900/60 text-purple-200 border border-purple-700/60"
+                                        >
+                                            🛡️ moderator1
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </header>
+            );
+        }
+
+        // =========================================================
+        // MODULE 2: MULTIPLAYER GAME LOBBY COMPONENT
+        // (Includes 5-player threshold, host start control & quick-fill)
+        // =========================================================
+        function LobbyView({ currentUser, showToast, onGameCompleted }) {
+            const [rooms, setRooms] = useState([]);
+            const [activeRoom, setActiveRoom] = useState(null);
+            const [newRoomName, setNewRoomName] = useState('');
+            const [loading, setLoading] = useState(false);
+            const [startingGame, setStartingGame] = useState(false);
+
+            // Fetch rooms list
+            const fetchRooms = async () => {
+                try {
+                    const res = await fetch('/api/rooms');
+                    const data = await res.json();
+                    if (data.status === 'success') {
+                        setRooms(data.rooms);
+                        // If active room exists, update its details
+                        if (activeRoom) {
+                            fetchRoomDetail(activeRoom.room_id);
+                        }
+                    }
+                } catch (e) {
+                    console.error(e);
+                }
+            };
+
+            const fetchRoomDetail = async (roomId) => {
+                try {
+                    const res = await fetch(`/api/rooms/${roomId}`);
+                    const data = await res.json();
+                    if (data.status === 'success') {
+                        setActiveRoom(data.room);
+                    }
+                } catch (e) {
+                    console.error(e);
+                }
+            };
+
+            useEffect(() => {
+                fetchRooms();
+                const interval = setInterval(fetchRooms, 3500);
+                return () => clearInterval(interval);
+            }, [activeRoom?.room_id]);
+
+            const handleCreateRoom = async (e) => {
+                e.preventDefault();
+                if (!currentUser) {
+                    showToast('Please sign in first to create a game room.', 'warning');
+                    return;
+                }
+                setLoading(true);
+                try {
+                    const res = await fetch('/api/rooms', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ room_name: newRoomName })
+                    });
+                    const data = await res.json();
+                    if (data.status === 'success') {
+                        showToast(`Room created! Code: ${data.room_code}`, 'success');
+                        setNewRoomName('');
+                        fetchRoomDetail(data.room_id);
+                    } else {
+                        showToast(data.message, 'error');
+                    }
+                } catch (err) {
+                    showToast('Failed to create room', 'error');
+                } finally {
+                    setLoading(false);
+                }
+            };
+
+            const handleJoinRoom = async (roomId) => {
+                if (!currentUser) {
+                    showToast('Please sign in to join a game room.', 'warning');
+                    return;
+                }
+                try {
+                    const res = await fetch(`/api/rooms/${roomId}/join`, { method: 'POST' });
+                    const data = await res.json();
+                    if (data.status === 'success') {
+                        showToast('Joined game room!', 'success');
+                        fetchRoomDetail(roomId);
+                    } else {
+                        showToast(data.message, 'error');
+                    }
+                } catch (err) {
+                    showToast('Failed to join room', 'error');
+                }
+            };
+
+            const handleLeaveRoom = async (roomId) => {
+                try {
+                    await fetch(`/api/rooms/${roomId}/leave`, { method: 'POST' });
+                    setActiveRoom(null);
+                    showToast('Left room', 'info');
+                    fetchRooms();
+                } catch (err) {
+                    console.error(err);
+                }
+            };
+
+            const handleQuickFill = async (roomId) => {
+                try {
+                    const res = await fetch(`/api/rooms/${roomId}/quick-fill`, { method: 'POST' });
+                    const data = await res.json();
+                    if (data.status === 'success') {
+                        showToast(data.message, 'success');
+                        fetchRoomDetail(roomId);
+                    }
+                } catch (err) {
+                    showToast('Quick-fill error', 'error');
+                }
+            };
+
+            const handleStartGame = async (roomId) => {
+                setStartingGame(true);
+                try {
+                    const res = await fetch(`/api/rooms/${roomId}/start`, { method: 'POST' });
+                    const data = await res.json();
+                    if (data.status === 'success') {
+                        showToast('Game simulated! All telemetry analyzed by Random Forest.', 'success');
+                        onGameCompleted();
+                    } else {
+                        showToast(data.message, 'error');
+                    }
+                } catch (err) {
+                    showToast('Failed to start game', 'error');
+                } finally {
+                    setStartingGame(false);
+                }
+            };
+
+            return (
+                <div className="space-y-8">
+                    {/* Header Banner */}
+                    <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-indigo-950/70 via-purple-950/50 to-slate-900 border border-indigo-500/20 p-8 shadow-2xl">
+                        <div className="relative z-10 max-w-2xl">
+                            <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 text-xs font-mono font-semibold uppercase tracking-wider mb-4">
+                                <i className="fa-solid fa-users"></i> Minimum 5-Player Room Validation
+                            </span>
+                            <h2 className="text-3xl font-black text-white tracking-tight sm:text-4xl">
+                                Multiplayer Match Lobby
+                            </h2>
+                            <p className="mt-3 text-slate-300 text-sm leading-relaxed">
+                                Players gather in multiplayer rooms before a match. Our game server enforces that <strong className="text-indigo-400">at least 5 players</strong> must join before the host can initiate telemetry collection and activate the Random Forest cheat detection model.
+                            </p>
+                        </div>
+                        <div className="absolute -right-10 -bottom-10 w-80 h-80 bg-indigo-600/10 rounded-full blur-3xl pointer-events-none"></div>
+                    </div>
+
+                    <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+                        {/* Left Column: Create Room & Room List */}
+                        <div className="lg:col-span-5 space-y-6">
+                            {/* Create Room Card */}
+                            <div className="bg-[#0f172a] border border-indigo-950/80 rounded-2xl p-6 shadow-xl">
+                                <div className="flex items-center gap-3 mb-4">
+                                    <div className="w-8 h-8 rounded-lg bg-indigo-600/20 flex items-center justify-center text-indigo-400 text-sm">
+                                        <i className="fa-solid fa-plus"></i>
+                                    </div>
+                                    <h3 className="font-bold text-white text-base">Create Game Room</h3>
+                                </div>
+                                <form onSubmit={handleCreateRoom} className="space-y-4">
+                                    <div>
+                                        <label className="block text-xs font-mono text-slate-400 mb-1.5">ROOM TITLE</label>
+                                        <input 
+                                            type="text" 
+                                            value={newRoomName}
+                                            onChange={e => setNewRoomName(e.target.value)}
+                                            placeholder="e.g. Tournament Match #4"
+                                            className="w-full bg-slate-900/90 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-indigo-500 transition"
+                                        />
+                                    </div>
+                                    <button
+                                        type="submit"
+                                        disabled={loading}
+                                        className="w-full py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-bold text-sm shadow-lg shadow-indigo-600/20 transition disabled:opacity-50 flex items-center justify-center gap-2"
+                                    >
+                                        <i className="fa-solid fa-circle-plus text-xs"></i>
+                                        <span>{loading ? 'Creating...' : 'Create & Host Room'}</span>
+                                    </button>
+                                </form>
+                            </div>
+
+                            {/* Public Rooms List */}
+                            <div className="bg-[#0f172a] border border-indigo-950/80 rounded-2xl p-6 shadow-xl">
+                                <div className="flex items-center justify-between mb-4">
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-8 h-8 rounded-lg bg-cyan-600/20 flex items-center justify-center text-cyan-400 text-sm">
+                                            <i className="fa-solid fa-list-ol"></i>
+                                        </div>
+                                        <h3 className="font-bold text-white text-base">Active Rooms</h3>
+                                    </div>
+                                    <button onClick={fetchRooms} className="text-slate-400 hover:text-white text-xs font-mono">
+                                        <i className="fa-solid fa-rotate-right mr-1"></i> Refresh
+                                    </button>
+                                </div>
+
+                                {rooms.length === 0 ? (
+                                    <div className="text-center py-8 text-slate-500 text-xs font-mono">
+                                        No active rooms found. Create one above!
+                                    </div>
+                                ) : (
+                                    <div className="space-y-3">
+                                        {rooms.map(r => {
+                                            const isSelected = activeRoom?.room_id === r.room_id;
+                                            return (
+                                                <div 
+                                                    key={r.room_id}
+                                                    onClick={() => fetchRoomDetail(r.room_id)}
+                                                    className={`p-4 rounded-xl border transition cursor-pointer flex items-center justify-between ${
+                                                        isSelected 
+                                                            ? 'bg-indigo-950/40 border-indigo-500/60 shadow-lg' 
+                                                            : 'bg-slate-900/60 border-slate-800 hover:border-slate-700'
+                                                    }`}
+                                                >
+                                                    <div>
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="font-bold text-sm text-white">{r.room_name}</span>
+                                                            <span className="px-2 py-0.5 rounded bg-slate-800 text-[10px] font-mono text-indigo-400 border border-slate-700">
+                                                                {r.room_code}
+                                                            </span>
+                                                        </div>
+                                                        <div className="text-xs text-slate-400 mt-1 flex items-center gap-3">
+                                                            <span><i className="fa-solid fa-crown text-amber-400 mr-1 text-[10px]"></i> {r.host_name}</span>
+                                                            <span className="font-mono text-indigo-300">
+                                                                <i className="fa-solid fa-user-group text-[10px] mr-1"></i> {r.player_count}/{r.min_players}
+                                                            </span>
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="flex items-center gap-2">
+                                                        <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase ${
+                                                            r.status === 'waiting' ? 'bg-amber-950/60 text-amber-400 border border-amber-800/40' :
+                                                            r.status === 'in_progress' ? 'bg-cyan-950/60 text-cyan-400 border border-cyan-800/40' :
+                                                            'bg-emerald-950/60 text-emerald-400 border border-emerald-800/40'
+                                                        }`}>
+                                                            {r.status}
+                                                        </span>
+                                                        <i className="fa-solid fa-chevron-right text-xs text-slate-500"></i>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Right Column: Room Details & 5-Player Roster */}
+                        <div className="lg:col-span-7">
+                            {activeRoom ? (
+                                <div className="bg-[#0f172a] border border-indigo-500/30 rounded-3xl p-6 lg:p-8 shadow-2xl relative cyber-glow">
+                                    {/* Room Header */}
+                                    <div className="flex flex-wrap items-center justify-between gap-4 pb-6 border-b border-slate-800">
+                                        <div>
+                                            <div className="flex items-center gap-3">
+                                                <h3 className="text-2xl font-black text-white">{activeRoom.room_name}</h3>
+                                                <span className="px-3 py-1 rounded-lg bg-indigo-950 text-indigo-300 border border-indigo-800 font-mono text-xs font-bold">
+                                                    {activeRoom.room_code}
+                                                </span>
+                                            </div>
+                                            <p className="text-xs text-slate-400 mt-1">
+                                                Host: <strong className="text-amber-400">{activeRoom.host_name}</strong> • Created: {new Date(activeRoom.created_at).toLocaleTimeString()}
+                                            </p>
+                                        </div>
+
+                                        {/* Player Progress Count (e.g. 3/5 or 5/5) */}
+                                        <div className="text-right">
+                                            <div className="text-xs font-mono text-slate-400 uppercase tracking-wider mb-1">Room Capacity</div>
+                                            <div className="flex items-center gap-2">
+                                                <span className={`text-2xl font-black font-mono ${
+                                                    activeRoom.player_count >= 5 ? 'text-emerald-400' : 'text-amber-400'
+                                                }`}>
+                                                    {activeRoom.player_count} / {activeRoom.min_players}
+                                                </span>
+                                                <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase font-mono ${
+                                                    activeRoom.can_start ? 'bg-emerald-950 text-emerald-300 border border-emerald-800' : 'bg-amber-950 text-amber-300 border border-amber-800'
+                                                }`}>
+                                                    {activeRoom.can_start ? 'THRESHOLD MET' : 'AWAITING 5 PLAYERS'}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Capacity Progress Bar */}
+                                    <div className="my-5">
+                                        <div className="flex justify-between text-xs text-slate-400 font-mono mb-1.5">
+                                            <span>Player Quorum Progress</span>
+                                            <span>{Math.min(100, Math.round((activeRoom.player_count / activeRoom.min_players) * 100))}%</span>
+                                        </div>
+                                        <div className="w-full bg-slate-900 rounded-full h-3 overflow-hidden p-0.5 border border-slate-800">
+                                            <div 
+                                                className={`h-full rounded-full transition-all duration-500 ${
+                                                    activeRoom.player_count >= 5 ? 'bg-gradient-to-r from-emerald-500 to-cyan-400 shadow-[0_0_12px_#10b981]' : 'bg-gradient-to-r from-amber-500 to-indigo-500'
+                                                }`}
+                                                style={{ width: `${Math.min(100, (activeRoom.player_count / activeRoom.min_players) * 100)}%` }}
+                                            ></div>
+                                        </div>
+                                    </div>
+
+                                    {/* Action Bar for Joining / Quick-Filling */}
+                                    <div className="flex flex-wrap items-center justify-between gap-3 p-4 bg-slate-900/80 rounded-2xl border border-slate-800 mb-6">
+                                        <div className="flex items-center gap-2">
+                                            <button
+                                                onClick={() => handleJoinRoom(activeRoom.room_id)}
+                                                className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs transition flex items-center gap-1.5"
+                                            >
+                                                <i className="fa-solid fa-right-to-bracket text-xs"></i>
+                                                <span>Join as Current User</span>
+                                            </button>
+                                            <button
+                                                onClick={() => handleLeaveRoom(activeRoom.room_id)}
+                                                className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-xs transition"
+                                            >
+                                                Leave
+                                            </button>
+                                        </div>
+
+                                        {/* Quick-Fill Presentation Button */}
+                                        <button
+                                            onClick={() => handleQuickFill(activeRoom.room_id)}
+                                            className="px-4 py-2 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:opacity-90 text-white font-semibold text-xs transition flex items-center gap-1.5 shadow-md shadow-purple-900/30"
+                                            title="Simulate 5 players joining the room in 1-click for presentations"
+                                        >
+                                            <i className="fa-solid fa-wand-magic-sparkles text-xs"></i>
+                                            <span>Quick-Fill 5 Players (Demo Helper)</span>
+                                        </button>
+                                    </div>
+
+                                    {/* Players List Roster */}
+                                    <div className="mb-6">
+                                        <h4 className="text-xs font-mono uppercase text-slate-400 font-bold mb-3 tracking-wider flex items-center justify-between">
+                                            <span>Joined Players Roster</span>
+                                            <span>{activeRoom.players.length} Active in Room</span>
+                                        </h4>
+
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                            {activeRoom.players.map((p, idx) => (
+                                                <div 
+                                                    key={p.user_id}
+                                                    className="flex items-center gap-3 p-3 bg-slate-900/90 rounded-xl border border-slate-800/80"
+                                                >
+                                                    <div 
+                                                        className="w-9 h-9 rounded-lg flex items-center justify-center font-bold text-white text-xs shadow"
+                                                        style={{ backgroundColor: p.avatar_color || '#6366f1' }}
+                                                    >
+                                                        {p.username.substring(0, 2).toUpperCase()}
+                                                    </div>
+                                                    <div className="flex-1 min-w-0">
+                                                        <div className="flex items-center gap-1.5">
+                                                            <span className="font-bold text-sm text-slate-200 truncate">{p.username}</span>
+                                                            {p.is_host === 1 && (
+                                                                <span className="px-1.5 py-0.2 rounded bg-amber-950 text-amber-300 border border-amber-800 text-[9px] font-mono uppercase">
+                                                                    Host
+                                                                </span>
+                                                            )}
+                                                            {p.is_bot === 1 && (
+                                                                <span className="px-1.5 py-0.2 rounded bg-purple-950 text-purple-300 border border-purple-800 text-[9px] font-mono uppercase">
+                                                                    AI Demo
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                        <span className="text-[10px] text-slate-500 font-mono">Slot #{idx + 1} • Ready</span>
+                                                    </div>
+                                                    <div className="w-2.5 h-2.5 rounded-full bg-emerald-400 shadow-[0_0_8px_#34d399]"></div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    {/* Game Start Controller Box */}
+                                    <div className="p-5 rounded-2xl bg-gradient-to-r from-slate-900 to-[#131b2e] border border-indigo-950 flex flex-col sm:flex-row items-center justify-between gap-4">
+                                        <div>
+                                            <div className="font-bold text-sm text-white flex items-center gap-2">
+                                                <i className="fa-solid fa-play text-indigo-400"></i>
+                                                <span>Match Launch Control</span>
+                                            </div>
+                                            <p className="text-xs text-slate-400 mt-0.5">
+                                                {activeRoom.can_start 
+                                                    ? 'Quorum reached! Host can now start round and run anti-cheat inference.'
+                                                    : `Start button disabled. Needs at least ${activeRoom.min_players - activeRoom.player_count} more player(s) to unlock.`}
+                                            </p>
+                                        </div>
+
+                                        <button
+                                            onClick={() => handleStartGame(activeRoom.room_id)}
+                                            disabled={!activeRoom.can_start || startingGame}
+                                            className={`px-8 py-3.5 rounded-xl font-bold text-sm transition flex items-center gap-2.5 shadow-xl ${
+                                                activeRoom.can_start 
+                                                    ? 'bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 hover:opacity-95 text-slate-950 shadow-emerald-500/20 cursor-pointer animate-pulse'
+                                                    : 'bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700'
+                                            }`}
+                                        >
+                                            <i className="fa-solid fa-gamepad"></i>
+                                            <span>
+                                                {startingGame ? 'Simulating & Analyzing...' : 
+                                                 activeRoom.can_start ? 'Start Game & Analyze Telemetry' : 
+                                                 `Locked (${activeRoom.player_count}/5 Players)`}
+                                            </span>
+                                        </button>
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="h-full min-h-[420px] bg-[#0f172a] border border-slate-800/80 rounded-3xl flex flex-col items-center justify-center p-8 text-center text-slate-500">
+                                    <div className="w-16 h-16 rounded-2xl bg-slate-900 flex items-center justify-center text-2xl text-slate-600 mb-4 border border-slate-800">
+                                        <i className="fa-solid fa-door-open"></i>
+                                    </div>
+                                    <h4 className="text-lg font-bold text-slate-300">Select or Create a Game Room</h4>
+                                    <p className="text-xs text-slate-500 max-w-sm mt-1">
+                                        Click on any active room on the left to view the live 5-player roster, or create your own custom tournament room.
+                                    </p>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        // =========================================================
+        // MODULE 3: INTERACTIVE TARGET REFLEX RANGE (GAMEPLAY SIMULATOR)
+        // =========================================================
+        function TargetRangeView({ currentUser, showToast, onEvaluated }) {
+            const [targetPos, setTargetPos] = useState({ top: 40, left: 50 });
+            const [targetActive, setTargetActive] = useState(false);
+            const [targetSpawnTime, setTargetSpawnTime] = useState(0);
+
+            // Gameplay real statistics
+            const [score, setScore] = useState(0);
+            const [shotsFired, setShotsFired] = useState(0);
+            const [hits, setHits] = useState(0);
+            const [headshots, setHeadshots] = useState(0);
+            const [reactionTimes, setReactionTimes] = useState([]);
+            const [startTime, setStartTime] = useState(null);
+            const [gameRunning, setGameRunning] = useState(false);
+            const [timeLeft, setTimeLeft] = useState(30);
+
+            // Timer countdown
+            useEffect(() => {
+                let interval = null;
+                if (gameRunning && timeLeft > 0) {
+                    interval = setInterval(() => {
+                        setTimeLeft(prev => prev - 1);
+                    }, 1000);
+                } else if (timeLeft === 0 && gameRunning) {
+                    setGameRunning(false);
+                    setTargetActive(false);
+                    showToast('Target session ended! Submit stats to test cheat detection.', 'info');
+                }
+                return () => clearInterval(interval);
+            }, [gameRunning, timeLeft]);
+
+            const spawnTarget = () => {
+                const top = Math.floor(Math.random() * 70) + 15;
+                const left = Math.floor(Math.random() * 80) + 10;
+                setTargetPos({ top, left });
+                setTargetSpawnTime(Date.now());
+                setTargetActive(true);
+            };
+
+            const startGame = () => {
+                setScore(0);
+                setShotsFired(0);
+                setHits(0);
+                setHeadshots(0);
+                setReactionTimes([]);
+                setTimeLeft(30);
+                setStartTime(Date.now());
+                setGameRunning(true);
+                spawnTarget();
+            };
+
+            const handleArenaClick = (e) => {
+                if (!gameRunning) return;
+                setShotsFired(prev => prev + 1);
+            };
+
+            const handleTargetClick = (e, isHeadshot) => {
+                e.stopPropagation();
+                if (!gameRunning || !targetActive) return;
+
+                const reactionMs = Date.now() - targetSpawnTime;
+                setReactionTimes(prev => [...prev, reactionMs]);
+                setHits(prev => prev + 1);
+                setScore(prev => prev + (isHeadshot ? 250 : 100));
+
+                if (isHeadshot) {
+                    setHeadshots(prev => prev + 1);
+                }
+
+                setTargetActive(false);
+                setTimeout(spawnTarget, 250);
+            };
+
+            // Calculated Metrics
+            const accuracyPct = shotsFired > 0 ? Math.round((hits / shotsFired) * 100) : 0;
+            const headshotPct = hits > 0 ? Math.round((headshots / hits) * 100) : 0;
+            const avgReaction = reactionTimes.length > 0 
+                ? Math.round(reactionTimes.reduce((a, b) => a + b, 0) / reactionTimes.length) 
+                : 240;
+            const elapsedSeconds = Math.max(1, 30 - timeLeft);
+            const aps = Math.round((shotsFired / elapsedSeconds) * 10) / 10;
+
+            // Submit live telemetry to Random Forest model
+            const submitTelemetry = async (overrideStats = null, profile = 'None') => {
+                if (!currentUser) {
+                    showToast('Please sign in before submitting telemetry.', 'warning');
+                    return;
+                }
+
+                const payload = overrideStats || {
+                    kills: hits,
+                    deaths: Math.max(1, Math.floor(hits / 3)),
+                    headshot_pct: headshotPct,
+                    accuracy_pct: accuracyPct,
+                    reaction_time_ms: avgReaction,
+                    movement_speed: 5.5,
+                    actions_per_second: aps,
+                    session_duration_s: elapsedSeconds,
+                    cheat_profile: profile
+                };
+
+                try {
+                    const res = await fetch('/api/gameplay/submit-live', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+                    const data = await res.json();
+                    if (data.status === 'success') {
+                        showToast(`Evaluated: ${data.prediction} (${data.cheat_probability}% Cheat Probability)`, data.prediction === 'Suspicious' ? 'error' : 'success');
+                        onEvaluated();
+                    } else {
+                        showToast(data.message, 'error');
+                    }
+                } catch (err) {
+                    showToast('Failed to evaluate telemetry', 'error');
+                }
+            };
+
+            return (
+                <div className="space-y-8">
+                    {/* Range Header */}
+                    <div className="flex flex-wrap items-center justify-between gap-4 p-6 bg-[#0f172a] rounded-3xl border border-indigo-950 shadow-xl">
+                        <div>
+                            <div className="flex items-center gap-2">
+                                <span className="px-3 py-1 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 font-mono text-xs font-semibold">
+                                    LIVE INTERACTIVE GAMEPLAY (is_simulated = 0)
+                                </span>
+                            </div>
+                            <h2 className="text-2xl font-black text-white mt-2">Reflex Arena: Target Range</h2>
+                            <p className="text-xs text-slate-400 mt-1">
+                                Click the targets to record real human reaction time, crosshair accuracy, and headshot ratios.
+                            </p>
+                        </div>
+
+                        {/* Presets for Testing */}
+                        <div className="flex items-center gap-2">
+                            <button
+                                onClick={() => submitTelemetry({
+                                    kills: 28, deaths: 1, headshot_pct: 92.0, accuracy_pct: 94.0,
+                                    reaction_time_ms: 130.0, movement_speed: 6.0, actions_per_second: 8.0,
+                                    session_duration_s: 300.0, cheat_profile: 'Aimbot'
+                                }, 'Aimbot')}
+                                className="px-3.5 py-2 rounded-xl bg-red-950/70 hover:bg-red-900/80 text-red-300 border border-red-500/40 text-xs font-semibold transition"
+                            >
+                                <i className="fa-solid fa-crosshairs mr-1.5"></i> Test Aimbot Preset
+                            </button>
+                            <button
+                                onClick={() => submitTelemetry({
+                                    kills: 24, deaths: 2, headshot_pct: 55.0, accuracy_pct: 82.0,
+                                    reaction_time_ms: 55.0, movement_speed: 5.5, actions_per_second: 7.0,
+                                    session_duration_s: 300.0, cheat_profile: 'Triggerbot'
+                                }, 'Triggerbot')}
+                                className="px-3.5 py-2 rounded-xl bg-purple-950/70 hover:bg-purple-900/80 text-purple-300 border border-purple-500/40 text-xs font-semibold transition"
+                            >
+                                <i className="fa-solid fa-bolt mr-1.5"></i> Test Triggerbot Preset
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* Stats HUD */}
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+                        <div className="p-4 bg-slate-900/90 rounded-2xl border border-slate-800 text-center">
+                            <div className="text-[10px] font-mono uppercase text-slate-400">Score</div>
+                            <div className="text-2xl font-black text-indigo-400 font-mono mt-1">{score}</div>
+                        </div>
+                        <div className="p-4 bg-slate-900/90 rounded-2xl border border-slate-800 text-center">
+                            <div className="text-[10px] font-mono uppercase text-slate-400">Accuracy</div>
+                            <div className="text-2xl font-black text-cyan-400 font-mono mt-1">{accuracyPct}%</div>
+                        </div>
+                        <div className="p-4 bg-slate-900/90 rounded-2xl border border-slate-800 text-center">
+                            <div className="text-[10px] font-mono uppercase text-slate-400">Headshot %</div>
+                            <div className="text-2xl font-black text-purple-400 font-mono mt-1">{headshotPct}%</div>
+                        </div>
+                        <div className="p-4 bg-slate-900/90 rounded-2xl border border-slate-800 text-center">
+                            <div className="text-[10px] font-mono uppercase text-slate-400">Avg Reaction</div>
+                            <div className="text-2xl font-black text-emerald-400 font-mono mt-1">{avgReaction} <span className="text-xs">ms</span></div>
+                        </div>
+                        <div className="p-4 bg-slate-900/90 rounded-2xl border border-slate-800 text-center">
+                            <div className="text-[10px] font-mono uppercase text-slate-400">Actions / Sec</div>
+                            <div className="text-2xl font-black text-amber-400 font-mono mt-1">{aps}</div>
+                        </div>
+                        <div className="p-4 bg-slate-900/90 rounded-2xl border border-slate-800 text-center">
+                            <div className="text-[10px] font-mono uppercase text-slate-400">Time Left</div>
+                            <div className={`text-2xl font-black font-mono mt-1 ${timeLeft <= 5 ? 'text-red-400 animate-ping' : 'text-slate-200'}`}>{timeLeft}s</div>
+                        </div>
+                    </div>
+
+                    {/* Interactive 2D Shooting Range Arena */}
+                    <div 
+                        onClick={handleArenaClick}
+                        className="relative w-full h-96 bg-[#060a14] rounded-3xl border-2 border-indigo-950 overflow-hidden cursor-crosshair select-none shadow-2xl"
+                    >
+                        {/* Background Grid Pattern */}
+                        <div className="absolute inset-0 bg-[linear-gradient(to_right,#1e1b4b15_1px,transparent_1px),linear-gradient(to_bottom,#1e1b4b15_1px,transparent_1px)] bg-[size:4rem_4rem]"></div>
+
+                        {!gameRunning ? (
+                            <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/60 backdrop-blur-sm z-20 p-6 text-center">
+                                <div className="w-16 h-16 rounded-2xl bg-indigo-600/20 border border-indigo-500/40 flex items-center justify-center text-indigo-400 text-3xl mb-4">
+                                    <i className="fa-solid fa-bullseye"></i>
+                                </div>
+                                <h3 className="text-xl font-bold text-white mb-2">Ready to Test Your Aim?</h3>
+                                <p className="text-xs text-slate-400 max-w-md mb-6">
+                                    Targets will spawn dynamically. Hit the center bullseye for headshots and faster reaction times!
+                                </p>
+                                <div className="flex gap-4">
+                                    <button
+                                        onClick={startGame}
+                                        className="px-8 py-3 rounded-xl bg-gradient-to-r from-indigo-600 via-purple-600 to-cyan-500 hover:opacity-90 text-white font-bold text-sm shadow-xl shadow-indigo-600/30 transition flex items-center gap-2"
+                                    >
+                                        <i className="fa-solid fa-play"></i> Start 30s Target Round
+                                    </button>
+                                    {shotsFired > 0 && (
+                                        <button
+                                            onClick={() => submitTelemetry()}
+                                            className="px-6 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm shadow-xl shadow-emerald-600/30 transition flex items-center gap-2"
+                                        >
+                                            <i className="fa-solid fa-brain"></i> Submit Live Telemetry
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
+                        ) : (
+                            /* Spawned Target Hitbox */
+                            targetActive && (
+                                <div 
+                                    className="absolute target-box cursor-pointer"
+                                    style={{ top: `${targetPos.top}%`, left: `${targetPos.left}%`, transform: 'translate(-50%, -50%)' }}
+                                    onClick={(e) => handleTargetClick(e, false)}
+                                >
+                                    {/* Outer Target Circle (Body Hit) */}
+                                    <div className="w-16 h-16 rounded-full bg-indigo-600/30 border-2 border-indigo-400 flex items-center justify-center shadow-[0_0_20px_#6366f1]">
+                                        {/* Inner Target Circle (Headshot Zone) */}
+                                        <div 
+                                            className="w-7 h-7 rounded-full bg-red-500 hover:bg-red-400 border border-white flex items-center justify-center shadow-[0_0_12px_#ef4444] transition-transform hover:scale-110"
+                                            onClick={(e) => handleTargetClick(e, true)}
+                                            title="Headshot Zone!"
+                                        >
+                                            <div className="w-2 h-2 rounded-full bg-white"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                            )
+                        )}
+                    </div>
+                </div>
+            );
+        }
+
+        // =========================================================
+        // MODULE 5: LIVE DETECTION DASHBOARD & 4 INTERACTIVE GRAPHS
+        // (Bar, Pie, Scatter, Line Charts using Chart.js)
+        // =========================================================
+        function DetectionDashboardView({ showToast, onSwitchToModerator }) {
+            const [data, setData] = useState(null);
+            const [loading, setLoading] = useState(true);
+
+            // Chart Canvas Refs
+            const barChartRef = useRef(null);
+            const pieChartRef = useRef(null);
+            const scatterChartRef = useRef(null);
+            const lineChartRef = useRef(null);
+
+            // Chart Instances
+            const barInstance = useRef(null);
+            const pieInstance = useRef(null);
+            const scatterInstance = useRef(null);
+            const lineInstance = useRef(null);
+
+            const fetchDashboardData = async () => {
+                try {
+                    const res = await fetch('/api/detection/dashboard');
+                    const json = await res.json();
+                    if (json.status === 'success') {
+                        setData(json);
+                    }
+                } catch (e) {
+                    console.error("Dashboard fetch error:", e);
+                } finally {
+                    setLoading(false);
+                }
+            };
+
+            useEffect(() => {
+                fetchDashboardData();
+                const interval = setInterval(fetchDashboardData, 5000);
+                return () => clearInterval(interval);
+            }, []);
+
+            // Render Chart.js graphs whenever data updates
+            useEffect(() => {
+                if (!data || !data.charts) return;
+
+                // 1. Bar Chart: Player vs Cheat Probability (%)
+                if (barChartRef.current) {
+                    if (barInstance.current) barInstance.current.destroy();
+                    const ctx = barChartRef.current.getContext('2d');
+                    barInstance.current = new Chart(ctx, {
+                        type: 'bar',
+                        data: {
+                            labels: data.charts.bar.labels,
+                            datasets: [{
+                                label: 'Cheat Probability (%)',
+                                data: data.charts.bar.probabilities,
+                                backgroundColor: data.charts.bar.colors,
+                                borderRadius: 8,
+                                borderWidth: 1,
+                                borderColor: 'rgba(255,255,255,0.1)'
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            scales: {
+                                y: {
+                                    min: 0,
+                                    max: 100,
+                                    grid: { color: 'rgba(255,255,255,0.05)' },
+                                    ticks: { color: '#94a3b8', font: { family: 'JetBrains Mono' } }
+                                },
+                                x: {
+                                    grid: { display: false },
+                                    ticks: { color: '#94a3b8' }
+                                }
+                            },
+                            plugins: {
+                                legend: { display: false }
+                            }
+                        }
+                    });
+                }
+
+                // 2. Pie Chart: Legitimate vs Suspicious Players
+                if (pieChartRef.current) {
+                    if (pieInstance.current) pieInstance.current.destroy();
+                    const ctx = pieChartRef.current.getContext('2d');
+                    pieInstance.current = new Chart(ctx, {
+                        type: 'doughnut',
+                        data: {
+                            labels: data.charts.pie.labels,
+                            datasets: [{
+                                data: data.charts.pie.data,
+                                backgroundColor: ['#10b981', '#ef4444'],
+                                borderColor: '#0f172a',
+                                borderWidth: 3
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            plugins: {
+                                legend: {
+                                    position: 'bottom',
+                                    labels: { color: '#f1f5f9', padding: 15, font: { family: 'Inter' } }
+                                }
+                            }
+                        }
+                    });
+                }
+
+                // 3. Scatter Plot: Accuracy (%) vs Reaction Time (ms)
+                if (scatterChartRef.current) {
+                    if (scatterInstance.current) scatterInstance.current.destroy();
+                    const ctx = scatterChartRef.current.getContext('2d');
+                    const legitPoints = data.charts.scatter.filter(p => p.prediction === 'Legitimate');
+                    const cheatPoints = data.charts.scatter.filter(p => p.prediction === 'Suspicious');
+
+                    scatterInstance.current = new Chart(ctx, {
+                        type: 'scatter',
+                        data: {
+                            datasets: [
+                                {
+                                    label: 'Legitimate Human Cluster',
+                                    data: legitPoints.map(p => ({ x: p.x, y: p.y })),
+                                    backgroundColor: 'rgba(16, 185, 129, 0.75)',
+                                    pointRadius: 6,
+                                    pointHoverRadius: 9
+                                },
+                                {
+                                    label: 'Superhuman / Aimbot Cluster',
+                                    data: cheatPoints.map(p => ({ x: p.x, y: p.y })),
+                                    backgroundColor: 'rgba(239, 68, 68, 0.85)',
+                                    pointRadius: 7,
+                                    pointHoverRadius: 10
+                                }
+                            ]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            scales: {
+                                x: {
+                                    title: { display: true, text: 'Weapon Accuracy (%)', color: '#94a3b8' },
+                                    grid: { color: 'rgba(255,255,255,0.05)' },
+                                    ticks: { color: '#94a3b8' }
+                                },
+                                y: {
+                                    title: { display: true, text: 'Reaction Time (ms)', color: '#94a3b8' },
+                                    grid: { color: 'rgba(255,255,255,0.05)' },
+                                    ticks: { color: '#94a3b8' }
+                                }
+                            },
+                            plugins: {
+                                legend: {
+                                    labels: { color: '#f1f5f9' }
+                                }
+                            }
+                        }
+                    });
+                }
+
+                // 4. Line Chart: Telemetry Trends over Recent Matches
+                if (lineChartRef.current) {
+                    if (lineInstance.current) lineInstance.current.destroy();
+                    const ctx = lineChartRef.current.getContext('2d');
+                    lineInstance.current = new Chart(ctx, {
+                        type: 'line',
+                        data: {
+                            labels: data.charts.line.labels,
+                            datasets: [
+                                {
+                                    label: 'Accuracy (%)',
+                                    data: data.charts.line.accuracy,
+                                    borderColor: '#06b6d4',
+                                    backgroundColor: 'rgba(6, 182, 212, 0.1)',
+                                    tension: 0.35,
+                                    fill: true
+                                },
+                                {
+                                    label: 'Headshot (%)',
+                                    data: data.charts.line.headshot,
+                                    borderColor: '#a855f7',
+                                    backgroundColor: 'rgba(168, 85, 247, 0.1)',
+                                    tension: 0.35,
+                                    fill: true
+                                }
+                            ]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            scales: {
+                                y: {
+                                    grid: { color: 'rgba(255,255,255,0.05)' },
+                                    ticks: { color: '#94a3b8' }
+                                },
+                                x: {
+                                    grid: { display: false },
+                                    ticks: { color: '#94a3b8' }
+                                }
+                            },
+                            plugins: {
+                                legend: { labels: { color: '#f1f5f9' } }
+                            }
+                        }
+                    });
+                }
+            }, [data]);
+
+            const triggerDemoMatch = async () => {
+                try {
+                    const res = await fetch('/api/demo/seed-match', { method: 'POST' });
+                    const resJson = await res.json();
+                    if (resJson.status === 'success') {
+                        showToast('Simulated 5-player competitive match & updated all charts!', 'success');
+                        fetchDashboardData();
+                    }
+                } catch (e) {
+                    showToast('Simulation error', 'error');
+                }
+            };
+
+            if (loading && !data) {
+                return (
+                    <div className="py-20 text-center">
+                        <div className="w-12 h-12 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
+                        <p className="text-slate-400 font-mono text-sm">Aggregating Random Forest Telemetry Graphs...</p>
+                    </div>
+                );
+            }
+
+            return (
+                <div className="space-y-8">
+                    {/* Header Controls */}
+                    <div className="flex flex-wrap items-center justify-between gap-4">
+                        <div>
+                            <h2 className="text-3xl font-black text-white tracking-tight">Live Detection Dashboard</h2>
+                            <p className="text-xs text-slate-400 mt-1">
+                                Real-time behavioral telemetry analyzed by the Random Forest classifier.
+                            </p>
+                        </div>
+                        <div className="flex items-center gap-3">
+                            <button
+                                onClick={triggerDemoMatch}
+                                className="px-4 py-2 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:opacity-90 text-white font-semibold text-xs shadow-md transition flex items-center gap-2"
+                            >
+                                <i className="fa-solid fa-bolt"></i>
+                                <span>Simulate 5-Player Match</span>
+                            </button>
+                            <button
+                                onClick={fetchDashboardData}
+                                className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition"
+                            >
+                                <i className="fa-solid fa-rotate-right"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* KPI Statistics Grid */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                        <div className="bg-[#0f172a] border border-indigo-950/80 p-5 rounded-2xl shadow-lg relative overflow-hidden">
+                            <div className="text-xs font-mono uppercase text-slate-400 font-semibold">Total Players Evaluated</div>
+                            <div className="text-3xl font-black text-white font-mono mt-2">{data.kpi.total_players}</div>
+                            <div className="text-[11px] text-slate-500 mt-1">Across all competitive matches</div>
+                            <i className="fa-solid fa-users absolute right-4 bottom-4 text-4xl text-slate-800/40 pointer-events-none"></i>
+                        </div>
+
+                        <div className="bg-[#0f172a] border border-emerald-950/60 p-5 rounded-2xl shadow-lg relative overflow-hidden">
+                            <div className="text-xs font-mono uppercase text-emerald-400 font-semibold">Legitimate Players</div>
+                            <div className="text-3xl font-black text-emerald-400 font-mono mt-2">{data.kpi.legitimate_players}</div>
+                            <div className="text-[11px] text-slate-500 mt-1">Biomechanical human tracking verified</div>
+                            <i className="fa-solid fa-shield-check absolute right-4 bottom-4 text-4xl text-emerald-950/40 pointer-events-none"></i>
+                        </div>
+
+                        <div className="bg-[#0f172a] border border-red-950/60 p-5 rounded-2xl shadow-lg relative overflow-hidden">
+                            <div className="text-xs font-mono uppercase text-red-400 font-semibold">Suspicious / Flagged</div>
+                            <div className="text-3xl font-black text-red-400 font-mono mt-2">{data.kpi.suspicious_players}</div>
+                            <div className="text-[11px] text-slate-500 mt-1">Queued for human moderator audit</div>
+                            <i className="fa-solid fa-triangle-exclamation absolute right-4 bottom-4 text-4xl text-red-950/40 pointer-events-none"></i>
+                        </div>
+
+                        <div className="bg-[#0f172a] border border-indigo-950/80 p-5 rounded-2xl shadow-lg relative overflow-hidden">
+                            <div className="text-xs font-mono uppercase text-cyan-400 font-semibold">Average Cheat Risk</div>
+                            <div className="text-3xl font-black text-cyan-400 font-mono mt-2">{data.kpi.avg_cheat_probability}%</div>
+                            <div className="text-[11px] text-slate-500 mt-1">Random Forest probability mean</div>
+                            <i className="fa-solid fa-gauge-high absolute right-4 bottom-4 text-4xl text-cyan-950/40 pointer-events-none"></i>
+                        </div>
+                    </div>
+
+                    {/* 4 Interactive Graphs Grid */}
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        {/* 1. Bar Chart: Cheat Probability per Player */}
+                        <div className="bg-[#0f172a] border border-indigo-950/80 p-6 rounded-3xl shadow-xl">
+                            <div className="flex items-center justify-between mb-4">
+                                <div>
+                                    <h3 className="font-bold text-white text-base">Player-Wise Cheat Probability</h3>
+                                    <p className="text-xs text-slate-400">Random Forest posterior probability per player</p>
+                                </div>
+                                <span className="px-2.5 py-1 rounded bg-slate-800 text-[11px] font-mono text-indigo-400">Bar Chart</span>
+                            </div>
+                            <div className="h-64">
+                                <canvas ref={barChartRef}></canvas>
+                            </div>
+                        </div>
+
+                        {/* 2. Doughnut / Pie Chart: Legit vs Suspicious */}
+                        <div className="bg-[#0f172a] border border-indigo-950/80 p-6 rounded-3xl shadow-xl">
+                            <div className="flex items-center justify-between mb-4">
+                                <div>
+                                    <h3 className="font-bold text-white text-base">Legitimate vs Suspicious Ratio</h3>
+                                    <p className="text-xs text-slate-400">Class composition across all room sessions</p>
+                                </div>
+                                <span className="px-2.5 py-1 rounded bg-slate-800 text-[11px] font-mono text-purple-400">Pie Chart</span>
+                            </div>
+                            <div className="h-64 flex items-center justify-center">
+                                <canvas ref={pieChartRef}></canvas>
+                            </div>
+                        </div>
+
+                        {/* 3. Scatter Plot: Accuracy vs Reaction Time */}
+                        <div className="bg-[#0f172a] border border-indigo-950/80 p-6 rounded-3xl shadow-xl">
+                            <div className="flex items-center justify-between mb-4">
+                                <div>
+                                    <h3 className="font-bold text-white text-base">Accuracy vs. Reaction Time</h3>
+                                    <p className="text-xs text-slate-400">Isolates non-human triggerbots & aimbot snaps</p>
+                                </div>
+                                <span className="px-2.5 py-1 rounded bg-slate-800 text-[11px] font-mono text-cyan-400">Scatter Plot</span>
+                            </div>
+                            <div className="h-64">
+                                <canvas ref={scatterChartRef}></canvas>
+                            </div>
+                        </div>
+
+                        {/* 4. Line Chart: Telemetry Trends */}
+                        <div className="bg-[#0f172a] border border-indigo-950/80 p-6 rounded-3xl shadow-xl">
+                            <div className="flex items-center justify-between mb-4">
+                                <div>
+                                    <h3 className="font-bold text-white text-base">Telemetry Trajectory Over Matches</h3>
+                                    <p className="text-xs text-slate-400">Tracking accuracy and headshot percentages</p>
+                                </div>
+                                <span className="px-2.5 py-1 rounded bg-slate-800 text-[11px] font-mono text-emerald-400">Line Chart</span>
+                            </div>
+                            <div className="h-64">
+                                <canvas ref={lineChartRef}></canvas>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Detection Results Table */}
+                    <div className="bg-[#0f172a] border border-indigo-950/80 rounded-3xl p-6 shadow-xl overflow-hidden">
+                        <div className="flex items-center justify-between mb-6">
+                            <div>
+                                <h3 className="font-bold text-white text-lg">Detailed Telemetry & Detection Table</h3>
+                                <p className="text-xs text-slate-400">Live per-player evaluation with Random Forest scores</p>
+                            </div>
+                            <span className="text-xs text-slate-400 font-mono">
+                                Showing {data.records.length} records
+                            </span>
+                        </div>
+
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-left text-xs border-collapse">
+                                <thead>
+                                    <tr className="border-b border-slate-800 text-slate-400 font-mono uppercase text-[11px]">
+                                        <th className="py-3 px-3">Player</th>
+                                        <th className="py-3 px-3">Type</th>
+                                        <th className="py-3 px-3">K / D</th>
+                                        <th className="py-3 px-3">Accuracy</th>
+                                        <th className="py-3 px-3">Headshot</th>
+                                        <th className="py-3 px-3">Reaction</th>
+                                        <th className="py-3 px-3">Speed</th>
+                                        <th className="py-3 px-3">Cheat Prob</th>
+                                        <th className="py-3 px-3">Prediction</th>
+                                        <th className="py-3 px-3">Moderator Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-800/60 font-sans">
+                                    {data.records.map((r, i) => (
+                                        <tr key={i} className="hover:bg-slate-900/60 transition">
+                                            <td className="py-3.5 px-3 font-semibold text-white flex items-center gap-2">
+                                                <div 
+                                                    className="w-6 h-6 rounded-md flex items-center justify-center font-bold text-[10px] text-white"
+                                                    style={{ backgroundColor: r.avatar_color || '#6366f1' }}
+                                                >
+                                                    {r.username.substring(0, 2).toUpperCase()}
+                                                </div>
+                                                <span>{r.username}</span>
+                                            </td>
+                                            <td className="py-3.5 px-3">
+                                                <span className={`px-2 py-0.5 rounded text-[10px] font-mono ${
+                                                    r.is_simulated === 0 ? 'bg-cyan-950 text-cyan-300 border border-cyan-800' : 'bg-slate-800 text-slate-400'
+                                                }`}>
+                                                    {r.is_simulated === 0 ? 'Real Live' : 'Simulated'}
+                                                </span>
+                                            </td>
+                                            <td className="py-3.5 px-3 font-mono">{r.kills} / {r.deaths} (KDR: {r.kdr})</td>
+                                            <td className="py-3.5 px-3 font-mono">{r.accuracy_pct}%</td>
+                                            <td className="py-3.5 px-3 font-mono">{r.headshot_pct}%</td>
+                                            <td className="py-3.5 px-3 font-mono">{r.reaction_time_ms} ms</td>
+                                            <td className="py-3.5 px-3 font-mono">{r.movement_speed} m/s</td>
+                                            <td className="py-3.5 px-3 font-mono font-bold">
+                                                <span className={r.cheat_probability >= 50 ? 'text-red-400' : 'text-emerald-400'}>
+                                                    {r.cheat_probability}%
+                                                </span>
+                                            </td>
+                                            <td className="py-3.5 px-3">
+                                                <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase ${
+                                                    r.prediction === 'Suspicious' 
+                                                        ? 'bg-red-950 text-red-400 border border-red-800/60 shadow-[0_0_8px_rgba(239,68,68,0.2)]' 
+                                                        : 'bg-emerald-950 text-emerald-400 border border-emerald-800/60'
+                                                }`}>
+                                                    {r.prediction}
+                                                </span>
+                                            </td>
+                                            <td className="py-3.5 px-3 text-slate-400 font-mono text-[11px]">
+                                                {r.moderator_decision === 'Confirmed Cheating' ? (
+                                                    <span className="text-red-400 font-bold"><i className="fa-solid fa-ban mr-1"></i> Confirmed</span>
+                                                ) : r.moderator_decision === 'Legitimate' ? (
+                                                    <span className="text-emerald-400 font-bold"><i className="fa-solid fa-check mr-1"></i> Cleared</span>
+                                                ) : (
+                                                    <span className="text-amber-400"><i className="fa-solid fa-clock mr-1"></i> Under Review</span>
+                                                )}
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        // =========================================================
+        // MODULE 6: MODERATOR DASHBOARD & HUMAN-IN-THE-LOOP AUDIT
+        // =========================================================
+        function ModeratorView({ currentUser, showToast }) {
+            const [queue, setQueue] = useState([]);
+            const [stats, setStats] = useState(null);
+            const [selectedCase, setSelectedCase] = useState(null);
+            const [decision, setDecision] = useState('Needs Further Review');
+            const [actionTaken, setActionTaken] = useState('Under Observation');
+            const [notes, setNotes] = useState('');
+            const [submitting, setSubmitting] = useState(false);
+
+            const fetchQueue = async () => {
+                try {
+                    const res = await fetch('/api/moderator/queue');
+                    const data = await res.json();
+                    if (data.status === 'success') {
+                        setQueue(data.queue);
+                        setStats(data.stats);
+                    }
+                } catch (e) {
+                    console.error(e);
+                }
+            };
+
+            useEffect(() => {
+                fetchQueue();
+            }, []);
+
+            const openReviewModal = (item) => {
+                setSelectedCase(item);
+                setDecision(item.decision || 'Needs Further Review');
+                setActionTaken(item.action_taken || 'Under Observation');
+                setNotes(item.notes || '');
+            };
+
+            const handleSubmitReview = async (e) => {
+                e.preventDefault();
+                if (!currentUser) {
+                    showToast('Please sign in as a moderator.', 'warning');
+                    return;
+                }
+                setSubmitting(true);
+                try {
+                    const res = await fetch('/api/moderator/review', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            detection_id: selectedCase.detection_id,
+                            decision: decision,
+                            notes: notes,
+                            action_taken: actionTaken
+                        })
+                    });
+                    const data = await res.json();
+                    if (data.status === 'success') {
+                        showToast(data.message, 'success');
+                        setSelectedCase(null);
+                        fetchQueue();
+                    } else {
+                        showToast(data.message, 'error');
+                    }
+                } catch (err) {
+                    showToast('Failed to save review', 'error');
+                } finally {
+                    setSubmitting(false);
+                }
+            };
+
+            return (
+                <div className="space-y-8">
+                    {/* Header Notice */}
+                    <div className="p-6 rounded-3xl bg-gradient-to-r from-purple-950/60 to-indigo-950/60 border border-purple-500/30 shadow-xl">
+                        <div className="flex items-center gap-3 mb-2">
+                            <span className="w-8 h-8 rounded-lg bg-purple-600/30 flex items-center justify-center text-purple-400">
+                                <i className="fa-solid fa-gavel"></i>
+                            </span>
+                            <h2 className="text-2xl font-black text-white">Moderator Review Center</h2>
+                        </div>
+                        <p className="text-xs text-slate-300 max-w-2xl leading-relaxed">
+                            <strong className="text-purple-300">Human-in-the-Loop Protocol:</strong> Machine Learning probabilities flag anomalous gameplay patterns, but the system never executes automatic bans without human verification. Moderators investigate telemetry and issue final determinations.
+                        </p>
+                    </div>
+
+                    {/* Stats Ribbon */}
+                    {stats && (
+                        <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+                            <div className="p-4 bg-[#0f172a] rounded-2xl border border-slate-800 text-center">
+                                <div className="text-xs font-mono text-slate-400">Total Flagged</div>
+                                <div className="text-2xl font-black text-white font-mono mt-1">{stats.total_flagged}</div>
+                            </div>
+                            <div className="p-4 bg-[#0f172a] rounded-2xl border border-amber-950 text-center">
+                                <div className="text-xs font-mono text-amber-400">Pending Review</div>
+                                <div className="text-2xl font-black text-amber-400 font-mono mt-1">{stats.pending_review}</div>
+                            </div>
+                            <div className="p-4 bg-[#0f172a] rounded-2xl border border-red-950 text-center">
+                                <div className="text-xs font-mono text-red-400">Confirmed Cheaters</div>
+                                <div className="text-2xl font-black text-red-400 font-mono mt-1">{stats.confirmed_cheating}</div>
+                            </div>
+                            <div className="p-4 bg-[#0f172a] rounded-2xl border border-emerald-950 text-center">
+                                <div className="text-xs font-mono text-emerald-400">Cleared Legitimate</div>
+                                <div className="text-2xl font-black text-emerald-400 font-mono mt-1">{stats.cleared_legitimate}</div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Audit Queue Table */}
+                    <div className="bg-[#0f172a] border border-indigo-950/80 rounded-3xl p-6 shadow-xl">
+                        <h3 className="font-bold text-white text-base mb-4">Suspicious Telemetry Queue</h3>
+
+                        {queue.length === 0 ? (
+                            <div className="text-center py-12 text-slate-500 font-mono text-xs">
+                                No suspicious gameplay records found. Run a match in the Lobby!
+                            </div>
+                        ) : (
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-left text-xs border-collapse">
+                                    <thead>
+                                        <tr className="border-b border-slate-800 text-slate-400 font-mono uppercase text-[11px]">
+                                            <th className="py-3 px-3">Player</th>
+                                            <th className="py-3 px-3">Probability</th>
+                                            <th className="py-3 px-3">Accuracy</th>
+                                            <th className="py-3 px-3">Headshots</th>
+                                            <th className="py-3 px-3">Reaction Time</th>
+                                            <th className="py-3 px-3">Detected Anomalies</th>
+                                            <th className="py-3 px-3">Status</th>
+                                            <th className="py-3 px-3">Action</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-800/60 font-sans">
+                                        {queue.map(item => (
+                                            <tr key={item.detection_id} className="hover:bg-slate-900/60 transition">
+                                                <td className="py-3.5 px-3 font-semibold text-white">
+                                                    {item.username}
+                                                </td>
+                                                <td className="py-3.5 px-3 font-mono font-bold text-red-400">
+                                                    {item.cheat_probability}%
+                                                </td>
+                                                <td className="py-3.5 px-3 font-mono">{item.accuracy_pct}%</td>
+                                                <td className="py-3.5 px-3 font-mono">{item.headshot_pct}%</td>
+                                                <td className="py-3.5 px-3 font-mono">{item.reaction_time_ms} ms</td>
+                                                <td className="py-3.5 px-3 max-w-xs truncate text-amber-300/90 font-mono text-[10px]">
+                                                    {item.anomaly_flags}
+                                                </td>
+                                                <td className="py-3.5 px-3">
+                                                    <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase ${
+                                                        item.decision === 'Confirmed Cheating' ? 'bg-red-950 text-red-400 border border-red-800' :
+                                                        item.decision === 'Legitimate' ? 'bg-emerald-950 text-emerald-400 border border-emerald-800' :
+                                                        'bg-amber-950 text-amber-400 border border-amber-800'
+                                                    }`}>
+                                                        {item.decision}
+                                                    </span>
+                                                </td>
+                                                <td className="py-3.5 px-3">
+                                                    <button
+                                                        onClick={() => openReviewModal(item)}
+                                                        className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs shadow transition flex items-center gap-1.5"
+                                                    >
+                                                        <i className="fa-solid fa-magnifying-glass text-[10px]"></i>
+                                                        <span>Review</span>
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Forensic Investigation Modal */}
+                    {selectedCase && (
+                        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+                            <div className="bg-[#0f172a] border border-indigo-500/40 w-full max-w-2xl rounded-3xl p-6 lg:p-8 shadow-2xl relative cyber-glow">
+                                <button 
+                                    onClick={() => setSelectedCase(null)}
+                                    className="absolute top-6 right-6 text-slate-400 hover:text-white"
+                                >
+                                    <i className="fa-solid fa-xmark text-lg"></i>
+                                </button>
+
+                                <div className="mb-6">
+                                    <div className="flex items-center gap-2 mb-1">
+                                        <span className="px-2.5 py-0.5 rounded bg-red-950 text-red-400 border border-red-800 font-mono text-xs font-bold uppercase">
+                                            Case #DET-{selectedCase.detection_id}
+                                        </span>
+                                    </div>
+                                    <h3 className="text-2xl font-black text-white">
+                                        Forensic Investigation: {selectedCase.username}
+                                    </h3>
+                                    <p className="text-xs text-slate-400 mt-0.5">
+                                        Evaluated by Random Forest Classifier • Model Risk: <strong className="text-red-400">{selectedCase.cheat_probability}%</strong>
+                                    </p>
+                                </div>
+
+                                {/* Telemetry Breakdown Box */}
+                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-4 bg-slate-900 rounded-2xl border border-slate-800 mb-6 font-mono text-xs">
+                                    <div>
+                                        <span className="text-slate-500">Accuracy</span>
+                                        <div className="text-base font-bold text-white">{selectedCase.accuracy_pct}%</div>
+                                    </div>
+                                    <div>
+                                        <span className="text-slate-500">Headshot %</span>
+                                        <div className="text-base font-bold text-white">{selectedCase.headshot_pct}%</div>
+                                    </div>
+                                    <div>
+                                        <span className="text-slate-500">Reaction Time</span>
+                                        <div className="text-base font-bold text-white">{selectedCase.reaction_time_ms} ms</div>
+                                    </div>
+                                    <div>
+                                        <span className="text-slate-500">Actions / Sec</span>
+                                        <div className="text-base font-bold text-white">{selectedCase.actions_per_second}</div>
+                                    </div>
+                                </div>
+
+                                {/* Anomaly Indicators */}
+                                <div className="mb-6 p-4 rounded-xl bg-amber-950/20 border border-amber-900/40">
+                                    <div className="text-xs font-bold text-amber-300 font-mono mb-1.5 flex items-center gap-1.5">
+                                        <i className="fa-solid fa-triangle-exclamation"></i> Identified Behavioral Anomalies:
+                                    </div>
+                                    <p className="text-xs text-slate-300 leading-relaxed font-sans">
+                                        {selectedCase.anomaly_flags || 'No rule-based anomalies reported.'}
+                                    </p>
+                                </div>
+
+                                {/* Review Determination Form */}
+                                <form onSubmit={handleSubmitReview} className="space-y-4">
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="block text-xs font-mono text-slate-400 mb-1.5">MODERATOR VERDICT</label>
+                                            <select
+                                                value={decision}
+                                                onChange={e => setDecision(e.target.value)}
+                                                className="w-full bg-slate-900 border border-slate-800 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-indigo-500"
+                                            >
+                                                <option value="Confirmed Cheating">🚫 Confirmed Cheating</option>
+                                                <option value="Legitimate">✅ Legitimate (False Positive Cleared)</option>
+                                                <option value="Needs Further Review">⏳ Needs Further Review</option>
+                                            </select>
+                                        </div>
+
+                                        <div>
+                                            <label className="block text-xs font-mono text-slate-400 mb-1.5">ACTION PROTOCOL</label>
+                                            <select
+                                                value={actionTaken}
+                                                onChange={e => setActionTaken(e.target.value)}
+                                                className="w-full bg-slate-900 border border-slate-800 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-indigo-500"
+                                            >
+                                                <option value="Under Observation">Under Observation</option>
+                                                <option value="Warning Issued">Warning Issued</option>
+                                                <option value="Account Suspended">Account Suspended</option>
+                                                <option value="Cleared">Cleared</option>
+                                            </select>
+                                        </div>
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-xs font-mono text-slate-400 mb-1.5">AUDIT EVIDENCE NOTES</label>
+                                        <textarea
+                                            value={notes}
+                                            onChange={e => setNotes(e.target.value)}
+                                            rows="3"
+                                            placeholder="Enter justification: e.g. Crosshair snapping confirmed with 92% headshots under 75ms..."
+                                            className="w-full bg-slate-900 border border-slate-800 rounded-xl p-3 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500"
+                                        ></textarea>
+                                    </div>
+
+                                    <div className="flex justify-end gap-3 pt-2">
+                                        <button
+                                            type="button"
+                                            onClick={() => setSelectedCase(null)}
+                                            className="px-5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-xs"
+                                        >
+                                            Cancel
+                                        </button>
+                                        <button
+                                            type="submit"
+                                            disabled={submitting}
+                                            className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:opacity-95 text-white font-bold text-xs shadow-lg shadow-purple-600/30"
+                                        >
+                                            {submitting ? 'Submitting...' : 'Save Audit Determination'}
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        // =========================================================
+        // MODULE 4/8: MACHINE LEARNING MODEL ANALYTICS & BENCHMARK
+        // =========================================================
+        function ModelAnalyticsView({ showToast }) {
+            const [modelInfo, setModelInfo] = useState(null);
+
+            useEffect(() => {
+                fetch('/api/model/info')
+                    .then(res => res.json())
+                    .then(data => {
+                        if (data.status === 'success') {
+                            setModelInfo(data.metadata);
+                        }
+                    })
+                    .catch(err => console.error(err));
+            }, []);
+
+            if (!modelInfo) {
+                return (
+                    <div className="py-20 text-center text-slate-400 font-mono text-sm">
+                        Loading Random Forest Metadata...
+                    </div>
+                );
+            }
+
+            return (
+                <div className="space-y-8">
+                    {/* Header */}
+                    <div className="p-8 rounded-3xl bg-gradient-to-r from-indigo-950/70 via-purple-950/50 to-slate-900 border border-indigo-500/20 shadow-2xl">
+                        <span className="px-3 py-1 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 text-xs font-mono font-semibold uppercase">
+                            Scikit-Learn Random Forest Pipeline
+                        </span>
+                        <h2 className="text-3xl font-black text-white mt-3">Machine Learning Architecture</h2>
+                        <p className="text-xs text-slate-400 mt-1 max-w-xl">
+                            Trained with 100 decision trees to separate genuine human biomechanical reflex distributions from synthetic software aim modifications.
+                        </p>
+                    </div>
+
+                    {/* Benchmark Metrics Grid */}
+                    <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
+                        <div className="p-5 bg-[#0f172a] rounded-2xl border border-slate-800 text-center">
+                            <span className="text-xs font-mono text-slate-400">Accuracy</span>
+                            <div className="text-3xl font-black text-emerald-400 font-mono mt-1">{(modelInfo.metrics.accuracy * 100).toFixed(2)}%</div>
+                        </div>
+                        <div className="p-5 bg-[#0f172a] rounded-2xl border border-slate-800 text-center">
+                            <span className="text-xs font-mono text-slate-400">Precision</span>
+                            <div className="text-3xl font-black text-cyan-400 font-mono mt-1">{(modelInfo.metrics.precision * 100).toFixed(2)}%</div>
+                        </div>
+                        <div className="p-5 bg-[#0f172a] rounded-2xl border border-slate-800 text-center">
+                            <span className="text-xs font-mono text-slate-400">Recall</span>
+                            <div className="text-3xl font-black text-purple-400 font-mono mt-1">{(modelInfo.metrics.recall * 100).toFixed(2)}%</div>
+                        </div>
+                        <div className="p-5 bg-[#0f172a] rounded-2xl border border-slate-800 text-center">
+                            <span className="text-xs font-mono text-slate-400">F1-Score</span>
+                            <div className="text-3xl font-black text-indigo-400 font-mono mt-1">{(modelInfo.metrics.f1_score * 100).toFixed(2)}%</div>
+                        </div>
+                        <div className="p-5 bg-[#0f172a] rounded-2xl border border-slate-800 text-center col-span-2 sm:col-span-1">
+                            <span className="text-xs font-mono text-slate-400">ROC-AUC</span>
+                            <div className="text-3xl font-black text-amber-400 font-mono mt-1">{modelInfo.metrics.roc_auc.toFixed(4)}</div>
+                        </div>
+                    </div>
+
+                    {/* Feature Importance Table */}
+                    <div className="bg-[#0f172a] border border-indigo-950/80 rounded-3xl p-6 lg:p-8 shadow-xl">
+                        <h3 className="font-bold text-white text-lg mb-4">Random Forest Feature Importances</h3>
+                        <div className="space-y-4">
+                            {modelInfo.feature_importances.map(item => (
+                                <div key={item.feature}>
+                                    <div className="flex justify-between text-xs font-mono mb-1">
+                                        <span className="text-slate-300 font-semibold">{item.feature}</span>
+                                        <span className="text-indigo-400 font-bold">{(item.importance * 100).toFixed(2)}%</span>
+                                    </div>
+                                    <div className="w-full bg-slate-900 rounded-full h-2.5 overflow-hidden border border-slate-800">
+                                        <div 
+                                            className="h-full rounded-full bg-gradient-to-r from-indigo-500 to-purple-500"
+                                            style={{ width: `${Math.max(5, item.importance * 100)}%` }}
+                                        ></div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        // Render React Application
+        ReactDOM.render(<App />, document.getElementById('root'));
+    </script>
+</body>
+</html>

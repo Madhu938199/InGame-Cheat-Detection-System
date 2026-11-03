@@ -1,0 +1,71 @@
+{
+    "model_name": "Random Forest Gameplay Anomaly Detector",
+    "algorithm": "RandomForestClassifier",
+    "n_estimators": 120,
+    "features": [
+        "kills",
+        "deaths",
+        "kdr",
+        "headshot_pct",
+        "accuracy_pct",
+        "reaction_time_ms",
+        "movement_speed",
+        "actions_per_second",
+        "session_duration_s"
+    ],
+    "metrics": {
+        "accuracy": 0.9986,
+        "precision": 0.9953,
+        "recall": 1.0,
+        "f1_score": 0.9976,
+        "roc_auc": 1.0
+    },
+    "confusion_matrix": {
+        "tn": 489,
+        "fp": 1,
+        "fn": 0,
+        "tp": 210
+    },
+    "feature_importances": [
+        {
+            "feature": "accuracy_pct",
+            "importance": 0.3189
+        },
+        {
+            "feature": "headshot_pct",
+            "importance": 0.2446
+        },
+        {
+            "feature": "kdr",
+            "importance": 0.175
+        },
+        {
+            "feature": "reaction_time_ms",
+            "importance": 0.1199
+        },
+        {
+            "feature": "movement_speed",
+            "importance": 0.0465
+        },
+        {
+            "feature": "actions_per_second",
+            "importance": 0.0423
+        },
+        {
+            "feature": "kills",
+            "importance": 0.0394
+        },
+        {
+            "feature": "deaths",
+            "importance": 0.0106
+        },
+        {
+            "feature": "session_duration_s",
+            "importance": 0.0028
+        }
+    ],
+    "thresholds": {
+        "suspicious_threshold": 45.0,
+        "high_risk_threshold": 75.0
+    }
+}

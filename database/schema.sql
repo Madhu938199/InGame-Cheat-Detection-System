@@ -1,98 +1,108 @@
--- =======================================================
--- In-Game Cheat Detection System (Aegis Anti-Cheat)
--- STAGE 7: Comprehensive Relational Database Schema
--- Database Target: MySQL / MariaDB (cheat_detection_db)
--- =======================================================
+-- ==========================================================
+-- Multiplayer In-Game Cheat Detection System
+-- Database Schema: SQLite / MySQL Compatible
+-- Tables:
+--   1. users
+--   2. game_rooms
+--   3. game_players
+--   4. gameplay_stats
+--   5. detection_results
+--   6. moderator_reviews
+-- ==========================================================
 
-CREATE DATABASE IF NOT EXISTS cheat_detection_db;
-USE cheat_detection_db;
-
--- 1. Users Table (Core Authentication & System Accounts)
+-- 1. Users Table
 CREATE TABLE IF NOT EXISTS users (
-    user_id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INTEGER PRIMARY KEY AUTOINCREMENT,
     username VARCHAR(50) NOT NULL UNIQUE,
     password_hash VARCHAR(255) NOT NULL,
-    role ENUM('player', 'moderator') NOT NULL DEFAULT 'player',
+    role VARCHAR(20) NOT NULL DEFAULT 'player', -- 'player' or 'moderator'
+    avatar_color VARCHAR(20) DEFAULT '#6366f1',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 2. Game Rooms Table
+CREATE TABLE IF NOT EXISTS game_rooms (
+    room_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    room_code VARCHAR(10) NOT NULL UNIQUE,
+    room_name VARCHAR(100) NOT NULL,
+    host_id INTEGER NOT NULL,
+    status VARCHAR(20) NOT NULL DEFAULT 'waiting', -- 'waiting', 'in_progress', 'completed'
+    min_players INTEGER NOT NULL DEFAULT 5,
+    max_players INTEGER NOT NULL DEFAULT 10,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    INDEX idx_user_role (role)
-) ENGINE=InnoDB;
+    started_at TIMESTAMP NULL,
+    ended_at TIMESTAMP NULL,
+    FOREIGN KEY (host_id) REFERENCES users(user_id) ON DELETE CASCADE
+);
 
--- 2. Players Table (Profile, UUID Mapping, & Trust Ratings)
-CREATE TABLE IF NOT EXISTS players (
-    player_id INT PRIMARY KEY,
-    player_uuid VARCHAR(64) NOT NULL UNIQUE,
-    total_matches INT DEFAULT 0,
-    trust_score FLOAT DEFAULT 100.0,
-    account_status ENUM('active', 'flagged', 'suspended') DEFAULT 'active',
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    FOREIGN KEY (player_id) REFERENCES users(user_id) ON DELETE CASCADE,
-    INDEX idx_player_uuid (player_uuid)
-) ENGINE=InnoDB;
+-- 3. Game Players (Lobby / Roster)
+CREATE TABLE IF NOT EXISTS game_players (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    room_id INTEGER NOT NULL,
+    user_id INTEGER NOT NULL,
+    is_host INTEGER NOT NULL DEFAULT 0, -- 1 if host, 0 otherwise
+    is_bot INTEGER NOT NULL DEFAULT 0,  -- 1 if simulated player, 0 if real user
+    player_status VARCHAR(20) NOT NULL DEFAULT 'ready', -- 'ready', 'playing', 'finished'
+    joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(room_id, user_id),
+    FOREIGN KEY (room_id) REFERENCES game_rooms(room_id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
+);
 
--- 3. Game Sessions & Telemetry Input Table
-CREATE TABLE IF NOT EXISTS game_sessions (
-    session_id INT AUTO_INCREMENT PRIMARY KEY,
-    player_id INT NOT NULL,
-    yaw FLOAT NOT NULL,
-    pitch FLOAT NOT NULL,
-    delta_yaw FLOAT NOT NULL,
-    delta_pitch FLOAT NOT NULL,
-    accel_yaw FLOAT NOT NULL,
-    accel_pitch FLOAT NOT NULL,
-    target_x FLOAT NOT NULL,
-    target_y FLOAT NOT NULL,
-    target_z FLOAT NOT NULL,
-    position_x FLOAT NOT NULL,
-    position_y FLOAT NOT NULL,
-    position_z FLOAT NOT NULL,
-    sensitivity FLOAT NOT NULL,
-    new_sequence INT NOT NULL DEFAULT 0,
+-- 4. Gameplay Statistics Table
+CREATE TABLE IF NOT EXISTS gameplay_stats (
+    stat_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    room_id INTEGER NOT NULL,
+    user_id INTEGER NOT NULL,
+    kills INTEGER NOT NULL DEFAULT 0,
+    deaths INTEGER NOT NULL DEFAULT 0,
+    kdr REAL NOT NULL DEFAULT 0.0,
+    headshot_pct REAL NOT NULL DEFAULT 0.0,
+    accuracy_pct REAL NOT NULL DEFAULT 0.0,
+    reaction_time_ms REAL NOT NULL DEFAULT 250.0,
+    movement_speed REAL NOT NULL DEFAULT 5.0,
+    actions_per_second REAL NOT NULL DEFAULT 5.0,
+    session_duration_s REAL NOT NULL DEFAULT 300.0,
+    is_simulated INTEGER NOT NULL DEFAULT 0, -- Clearly distinguishes simulated from real
+    cheat_profile VARCHAR(50) DEFAULT 'None', -- For demo ground truth testing
+    recorded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (room_id) REFERENCES game_rooms(room_id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
+);
+
+-- 5. Cheat Detection Results Table (ML Random Forest Output)
+CREATE TABLE IF NOT EXISTS detection_results (
+    detection_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    stat_id INTEGER NOT NULL UNIQUE,
+    room_id INTEGER NOT NULL,
+    user_id INTEGER NOT NULL,
+    prediction VARCHAR(20) NOT NULL, -- 'Legitimate' or 'Suspicious'
+    cheat_probability REAL NOT NULL, -- 0.0 to 100.0 %
+    risk_level VARCHAR(20) NOT NULL, -- 'LOW', 'MEDIUM', 'HIGH'
+    anomaly_flags TEXT,              -- Comma-separated or JSON list of detected anomalies
+    model_name VARCHAR(100) DEFAULT 'Random Forest v1.0',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (player_id) REFERENCES users(user_id) ON DELETE CASCADE,
-    INDEX idx_session_player (player_id),
-    INDEX idx_session_time (created_at)
-) ENGINE=InnoDB;
+    FOREIGN KEY (stat_id) REFERENCES gameplay_stats(stat_id) ON DELETE CASCADE,
+    FOREIGN KEY (room_id) REFERENCES game_rooms(room_id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
+);
 
--- 4. ML Predictions & Real-Time Risk Scores
--- Stores algorithm output strictly separated from human moderator review
-CREATE TABLE IF NOT EXISTS predictions (
-    prediction_id INT AUTO_INCREMENT PRIMARY KEY,
-    session_id INT NOT NULL UNIQUE,
-    prediction ENUM('LEGITIMATE', 'SUSPICIOUS') NOT NULL,
-    probability FLOAT NOT NULL,           -- Continuous risk probability (0.00% - 100.00%)
-    risk_level ENUM('LOW', 'MEDIUM', 'HIGH') NOT NULL,
-    model_version VARCHAR(50) NOT NULL DEFAULT 'v2.0-group-aware',
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (session_id) REFERENCES game_sessions(session_id) ON DELETE CASCADE,
-    INDEX idx_prediction_risk (risk_level),
-    INDEX idx_prediction_label (prediction)
-) ENGINE=InnoDB;
-
--- 5. Moderator Reviews Table (Human-in-the-Loop Audit Queue)
--- Explicitly isolated from ML prediction to allow audit trail and false-positive tracking
+-- 6. Moderator Reviews Table (Human-in-the-Loop Decision Center)
 CREATE TABLE IF NOT EXISTS moderator_reviews (
-    review_id INT AUTO_INCREMENT PRIMARY KEY,
-    prediction_id INT NOT NULL UNIQUE,
-    moderator_id INT NOT NULL,
-    decision ENUM('Under Review', 'Confirmed Suspicious', 'Not Suspicious') NOT NULL DEFAULT 'Under Review',
-    comments TEXT,
-    reviewed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    FOREIGN KEY (prediction_id) REFERENCES predictions(prediction_id) ON DELETE CASCADE,
-    FOREIGN KEY (moderator_id) REFERENCES users(user_id) ON DELETE CASCADE,
-    INDEX idx_review_decision (decision)
-) ENGINE=InnoDB;
+    review_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    detection_id INTEGER NOT NULL UNIQUE,
+    moderator_id INTEGER NOT NULL,
+    decision VARCHAR(50) NOT NULL DEFAULT 'Needs Further Review', -- 'Confirmed Cheating', 'Legitimate', 'Needs Further Review'
+    notes TEXT,
+    action_taken VARCHAR(50) DEFAULT 'Under Observation', -- 'Under Observation', 'Warning Issued', 'Account Suspended', 'Cleared'
+    reviewed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (detection_id) REFERENCES detection_results(detection_id) ON DELETE CASCADE,
+    FOREIGN KEY (moderator_id) REFERENCES users(user_id) ON DELETE CASCADE
+);
 
--- =======================================================
--- Initial Demonstration Seed Accounts (Pass: password123)
--- =======================================================
-INSERT INTO users (username, password_hash, role) 
-VALUES 
-('player1', 'scrypt:32768:8:1$K5zQ7jA91yE7$b1d7d5668e1c625eb2eb23b090bcad76b5c165313dcb899c75549e3734638c4b1263c7b64923e3e0fce5982855fce72b8364f3316d99b19dfb48e6584283842c', 'player'),
-('moderator1', 'scrypt:32768:8:1$K5zQ7jA91yE7$b1d7d5668e1c625eb2eb23b090bcad76b5c165313dcb899c75549e3734638c4b1263c7b64923e3e0fce5982855fce72b8364f3316d99b19dfb48e6584283842c', 'moderator')
-ON DUPLICATE KEY UPDATE role=VALUES(role);
-
--- Seed Player Profile for player1
-INSERT INTO players (player_id, player_uuid, total_matches, trust_score, account_status)
-SELECT user_id, '25202025-75e3-47f0-9f2b-1e6e9a088193', 12, 98.5, 'active'
-FROM users WHERE username = 'player1'
-ON DUPLICATE KEY UPDATE total_matches=VALUES(total_matches);
+-- Indexing for high-performance dashboard queries
+CREATE INDEX IF NOT EXISTS idx_room_code ON game_rooms(room_code);
+CREATE INDEX IF NOT EXISTS idx_room_players ON game_players(room_id);
+CREATE INDEX IF NOT EXISTS idx_stats_room ON gameplay_stats(room_id);
+CREATE INDEX IF NOT EXISTS idx_detection_room ON detection_results(room_id);
+CREATE INDEX IF NOT EXISTS idx_detection_prediction ON detection_results(prediction);
