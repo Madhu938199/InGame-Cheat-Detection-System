@@ -10,18 +10,25 @@ echo.
 cd /d "%~dp0"
 
 echo [1/3] Checking Python installation...
-where py >nul 2>&1
-if %ERRORLEVEL% EQU 0 (
-    set PY_CMD=py
+set PY_CMD=
+if exist "C:\ProgramData\anaconda3\python.exe" (
+    set PY_CMD="C:\ProgramData\anaconda3\python.exe"
+) else if exist "C:\Users\ADMIN\AppData\Local\Programs\Python\Python313\python.exe" (
+    set PY_CMD="C:\Users\ADMIN\AppData\Local\Programs\Python\Python313\python.exe"
 ) else (
-    where python >nul 2>&1
+    where py >nul 2>&1
     if %ERRORLEVEL% EQU 0 (
-        set PY_CMD=python
+        set PY_CMD=py
     ) else (
-        echo [ERROR] Python was not found in PATH!
-        echo Please install Python 3.9+ from https://www.python.org/
-        pause
-        exit /b 1
+        where python >nul 2>&1
+        if %ERRORLEVEL% EQU 0 (
+            set PY_CMD=python
+        ) else (
+            echo [ERROR] Python was not found in PATH!
+            echo Please install Python 3.9+ from https://www.python.org/
+            pause
+            exit /b 1
+        )
     )
 )
 

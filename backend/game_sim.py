@@ -47,6 +47,15 @@ def generate_player_gameplay_stats(cheat_profile='None', is_simulated=1):
         reaction_time = round(random.uniform(170.0, 210.0), 1) # Pro human reflex limit
         speed = round(random.uniform(5.8, 6.8), 1)
         aps = round(random.uniform(7.0, 10.5), 1)
+    elif cheat_profile == 'Suspicious_Anomalous':
+        # Borderline performance: elevated combat metrics, high input frequency, queued for review
+        kills = random.randint(15, 23)
+        deaths = random.randint(3, 6)
+        headshot_pct = round(random.uniform(48.0, 62.0), 1)
+        accuracy_pct = round(random.uniform(55.0, 72.0), 1)
+        reaction_time = round(random.uniform(140.0, 175.0), 1) # Borderline reflex
+        speed = round(random.uniform(5.5, 6.5), 1)
+        aps = round(random.uniform(11.0, 16.5), 1) # Elevated APS
     elif cheat_profile == 'Aimbot':
         kills = random.randint(24, 38)
         deaths = random.randint(0, 3)
@@ -118,8 +127,8 @@ def quick_fill_room_with_demo_players(room_id):
             break
         if u['user_id'] not in existing_user_ids:
             cur.execute("""
-                INSERT INTO game_players (room_id, user_id, is_host, is_bot, player_status)
-                VALUES (?, ?, 0, 0, 'ready')
+                INSERT INTO game_players (room_id, user_id, is_host, is_bot, player_status, is_online, score)
+                VALUES (?, ?, 0, 0, 'ready', 1, 0)
             """, (room_id, u['user_id']))
             existing_user_ids.add(u['user_id'])
             added += 1
@@ -142,8 +151,8 @@ def quick_fill_room_with_demo_players(room_id):
 
         if bot_user_id not in existing_user_ids:
             cur.execute("""
-                INSERT INTO game_players (room_id, user_id, is_host, is_bot, player_status)
-                VALUES (?, ?, 0, 1, 'ready')
+                INSERT INTO game_players (room_id, user_id, is_host, is_bot, player_status, is_online, score)
+                VALUES (?, ?, 0, 1, 'ready', 1, 0)
             """, (room_id, bot_user_id))
             existing_user_ids.add(bot_user_id)
             added += 1
@@ -179,9 +188,8 @@ def simulate_and_evaluate_match(room_id):
     # Mark room as completed / in_progress
     cur.execute("UPDATE game_rooms SET status = 'completed', ended_at = CURRENT_TIMESTAMP WHERE room_id = ?", (room_id,))
 
-    # Profiles to assign: for a realistic presentation, assign:
-    # 3-4 legitimate players + 1-2 suspicious cheaters (e.g. Aimbot or Triggerbot)
-    profiles_pool = ['Legit_Casual', 'Legit_Average', 'Legit_Pro', 'Aimbot', 'Triggerbot', 'Legit_Average', 'Speedhack']
+    # 3-tier presentation: Legitimate players + Suspicious anomaly + Blatant cheater
+    profiles_pool = ['Legit_Casual', 'Legit_Average', 'Suspicious_Anomalous', 'Aimbot', 'Legit_Pro', 'Triggerbot', 'Speedhack']
     random.shuffle(profiles_pool)
 
     results_summary = []

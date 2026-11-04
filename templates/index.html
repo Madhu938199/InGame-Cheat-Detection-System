@@ -88,6 +88,7 @@
 
     <!-- React Application Script -->
     <script type="text/babel">
+    {% raw %}
         const { useState, useEffect, useRef } = React;
 
         // =========================================================
@@ -99,15 +100,16 @@
             const [authLoading, setAuthLoading] = useState(true);
 
             // Active View Navigation
-            // 'lobby', 'gameplay', 'dashboard', 'moderator', 'model'
-            const [activeTab, setActiveTab] = useState('lobby');
+            // 'flowchart', 'lobby', 'gameplay', 'dashboard', 'moderator', 'model'
+            const [activeTab, setActiveTab] = useState('flowchart');
 
             // Global Notification Toast
             const [toast, setToast] = useState(null);
+            const [demoRunning, setDemoRunning] = useState(false);
 
             const showToast = (message, type = 'info') => {
                 setToast({ message, type });
-                setTimeout(() => setToast(null), 4000);
+                setTimeout(() => setToast(null), 4500);
             };
 
             // Check session on mount
@@ -133,6 +135,49 @@
                 }
             };
 
+            // Automated End-to-End Walkthrough of the 10-Stage Pipeline
+            const runEndToEndDemo = async () => {
+                if (demoRunning) return;
+                setDemoRunning(true);
+                showToast("Pipeline Demo: Stage A - Ensuring Player Authentication...", "info");
+
+                try {
+                    // Step A: Ensure logged in as player1 (default host)
+                    if (!currentUser) {
+                        const authRes = await fetch('/api/auth/login', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ username: 'player1', password: 'password123' })
+                        });
+                        const authData = await authRes.json();
+                        if (authData.status === 'success') {
+                            setCurrentUser(authData.user);
+                        }
+                    }
+
+                    await new Promise(r => setTimeout(r, 600));
+                    showToast("Pipeline Demo: Stage B & C - Room Quorum (Quick-Filling 5 Players)...", "info");
+
+                    // Step B, C, D: Seed match room with 5 players & start match
+                    const matchRes = await fetch('/api/demo/seed-match', { method: 'POST' });
+                    const matchData = await matchRes.json();
+
+                    await new Promise(r => setTimeout(r, 800));
+                    showToast("Pipeline Demo: Stage E & F - Telemetry Collected & Random Forest ML Evaluated!", "info");
+
+                    await new Promise(r => setTimeout(r, 800));
+                    showToast("Pipeline Demo: Stage G & H - Players Classified into Legitimate, Suspicious & Cheating!", "success");
+
+                    setActiveTab('dashboard');
+                    await new Promise(r => setTimeout(r, 600));
+                    showToast("Pipeline Demo: Stage I & J - Live Graphs Rendered! Check Moderator Audit Center.", "success");
+                } catch (e) {
+                    showToast("Pipeline error: " + (e.message || 'Execution failed'), "error");
+                } finally {
+                    setDemoRunning(false);
+                }
+            };
+
             if (authLoading) {
                 return (
                     <div className="flex items-center justify-center min-h-screen bg-[#070b14]">
@@ -149,10 +194,10 @@
                     {/* Toast Alert */}
                     {toast && (
                         <div className={`fixed top-5 right-5 z-50 flex items-center gap-3 px-5 py-3 rounded-xl border shadow-2xl backdrop-blur-md transition-all duration-300 ${
-                            toast.type === 'error' ? 'bg-red-950/80 border-red-500 text-red-200' :
-                            toast.type === 'success' ? 'bg-emerald-950/80 border-emerald-500 text-emerald-200' :
-                            toast.type === 'warning' ? 'bg-amber-950/80 border-amber-500 text-amber-200' :
-                            'bg-indigo-950/80 border-indigo-500 text-indigo-200'
+                            toast.type === 'error' ? 'bg-red-950/90 border-red-500 text-red-200' :
+                            toast.type === 'success' ? 'bg-emerald-950/90 border-emerald-500 text-emerald-200' :
+                            toast.type === 'warning' ? 'bg-amber-950/90 border-amber-500 text-amber-200' :
+                            'bg-indigo-950/90 border-indigo-500 text-indigo-200'
                         }`}>
                             <i className={`fa-solid ${
                                 toast.type === 'error' ? 'fa-triangle-exclamation' :
@@ -181,10 +226,29 @@
                             currentUser={currentUser} 
                             setCurrentUser={setCurrentUser} 
                             showToast={showToast}
+                            activeTab={activeTab}
+                            setActiveTab={setActiveTab}
+                            onRunDemo={runEndToEndDemo}
+                            demoRunning={demoRunning}
+                        />
+
+                        {/* Interactive Horizontal Pipeline Breadcrumb / Progress Bar */}
+                        <PipelineProgressBar 
+                            activeTab={activeTab} 
+                            setActiveTab={setActiveTab} 
                         />
 
                         {/* View Router */}
                         <main className="flex-1 p-6 lg:p-8 max-w-7xl w-full mx-auto">
+                            {activeTab === 'flowchart' && (
+                                <FlowchartArchitectureView 
+                                    currentUser={currentUser}
+                                    showToast={showToast}
+                                    setActiveTab={setActiveTab}
+                                    onRunDemo={runEndToEndDemo}
+                                    demoRunning={demoRunning}
+                                />
+                            )}
                             {activeTab === 'lobby' && (
                                 <LobbyView 
                                     currentUser={currentUser} 
@@ -225,10 +289,11 @@
         // =========================================================
         function Sidebar({ activeTab, setActiveTab, currentUser, onLogout }) {
             const navItems = [
-                { id: 'lobby', label: 'Multiplayer Lobby', icon: 'fa-gamepad', desc: 'Join rooms & 5-player start' },
+                { id: 'flowchart', label: 'System Flowchart', icon: 'fa-diagram-project', desc: '10-Stage Pipeline Architecture' },
+                { id: 'lobby', label: 'Multiplayer Lobby', icon: 'fa-gamepad', desc: 'Join rooms & 5-player quorum' },
                 { id: 'gameplay', label: 'Target Reflex Range', icon: 'fa-crosshairs', desc: 'Interactive shooting simulator' },
-                { id: 'dashboard', label: 'Live Detection Center', icon: 'fa-chart-pie', desc: '4 Graphs & ML Predictions' },
-                { id: 'moderator', label: 'Moderator Review', icon: 'fa-user-shield', desc: 'Human-in-the-loop audit' },
+                { id: 'dashboard', label: 'Live Detection Center', icon: 'fa-chart-pie', desc: '4 Graphs & 3-Tier Classification' },
+                { id: 'moderator', label: 'Moderator Review', icon: 'fa-user-shield', desc: 'Human-in-the-loop audit queue' },
                 { id: 'model', label: 'ML Model Analytics', icon: 'fa-brain', desc: 'Random Forest benchmark & features' },
             ];
 
@@ -318,7 +383,7 @@
         // =========================================================
         // TOP HEADER COMPONENT (WITH LOGIN / REGISTER MODAL)
         // =========================================================
-        function Header({ currentUser, setCurrentUser, showToast }) {
+        function Header({ currentUser, setCurrentUser, showToast, activeTab, setActiveTab, onRunDemo, demoRunning }) {
             const [showAuthModal, setShowAuthModal] = useState(false);
             const [authMode, setAuthMode] = useState('login'); // 'login' or 'register'
             const [username, setUsername] = useState('');
@@ -359,15 +424,36 @@
             };
 
             return (
-                <header className="h-16 border-b border-indigo-950/40 bg-[#090e1a]/80 backdrop-blur-md px-8 flex items-center justify-between sticky top-0 z-30">
+                <header className="h-16 border-b border-indigo-950/40 bg-[#090e1a]/80 backdrop-blur-md px-6 lg:px-8 flex items-center justify-between sticky top-0 z-30">
                     <div className="flex items-center gap-3">
                         <span className="flex h-2.5 w-2.5 relative">
                             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                             <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
                         </span>
-                        <span className="text-xs font-mono font-medium text-slate-400">
-                            Server Status: <strong className="text-emerald-400">Online (Random Forest ML Active)</strong>
+                        <span className="text-xs font-mono font-medium text-slate-400 hidden lg:inline">
+                            Aegis Core: <strong className="text-emerald-400">Random Forest Active</strong>
                         </span>
+
+                        <button
+                            onClick={() => setActiveTab('flowchart')}
+                            className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition flex items-center gap-1.5 border ${
+                                activeTab === 'flowchart'
+                                    ? 'bg-indigo-600/30 border-indigo-400 text-white shadow-sm'
+                                    : 'bg-slate-900 border-slate-800 text-slate-300 hover:border-slate-700'
+                            }`}
+                        >
+                            <i className="fa-solid fa-diagram-project text-indigo-400"></i>
+                            <span>Flowchart Architecture</span>
+                        </button>
+
+                        <button
+                            onClick={onRunDemo}
+                            disabled={demoRunning}
+                            className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-amber-500/20 to-orange-500/20 border border-amber-500/40 text-amber-300 hover:bg-amber-500/30 text-xs font-semibold transition flex items-center gap-1.5 disabled:opacity-50"
+                        >
+                            <i className={`fa-solid ${demoRunning ? 'fa-spinner animate-spin' : 'fa-bolt'} text-amber-400`}></i>
+                            <span className="hidden sm:inline">{demoRunning ? 'Running Flow...' : '⚡ 1-Click Pipeline Demo'}</span>
+                        </button>
                     </div>
 
                     <div className="flex items-center gap-4">
@@ -519,6 +605,353 @@
                         </div>
                     )}
                 </header>
+            );
+        }
+
+        // =========================================================
+        // PIPELINE PROGRESS BAR (VISUAL FLOWCHART BREADCRUMB)
+        // =========================================================
+        function PipelineProgressBar({ activeTab, setActiveTab }) {
+            const steps = [
+                { key: 'A', name: 'A: Player Auth', tab: 'lobby', icon: 'fa-id-card-clip' },
+                { key: 'B', name: 'B: Game Room', tab: 'lobby', icon: 'fa-door-open' },
+                { key: 'C', name: 'C: Min 5 Players', tab: 'lobby', icon: 'fa-users' },
+                { key: 'D', name: 'D: Start Game', tab: 'lobby', icon: 'fa-play' },
+                { key: 'E', name: 'E: Telemetry', tab: 'gameplay', icon: 'fa-crosshairs' },
+                { key: 'F', name: 'F: ML Model', tab: 'model', icon: 'fa-brain' },
+                { key: 'G', name: 'G: Classify', tab: 'dashboard', icon: 'fa-calculator' },
+                { key: 'H', name: 'H: 3-Tier Class', tab: 'dashboard', icon: 'fa-scale-balanced' },
+                { key: 'I', name: 'I: Dashboard', tab: 'dashboard', icon: 'fa-chart-pie' },
+                { key: 'J', name: 'J: Moderator', tab: 'moderator', icon: 'fa-user-shield' }
+            ];
+
+            const isStepActive = (step) => {
+                if (activeTab === 'flowchart') return true;
+                if (step.tab === activeTab) return true;
+                return false;
+            };
+
+            return (
+                <div className="bg-[#090e1a] border-b border-indigo-950/40 px-6 py-2.5 overflow-x-auto select-none">
+                    <div className="flex items-center min-w-max gap-1 sm:gap-2 text-xs">
+                        <span className="text-[10px] font-mono uppercase text-indigo-400/90 font-bold flex items-center gap-1.5 mr-2">
+                            <i className="fa-solid fa-route"></i> Pipeline Flow:
+                        </span>
+                        {steps.map((s, idx) => {
+                            const active = isStepActive(s);
+                            return (
+                                <React.Fragment key={s.key}>
+                                    <button
+                                        onClick={() => setActiveTab(s.tab)}
+                                        className={`px-2.5 py-1 rounded-lg font-mono text-[11px] transition-all flex items-center gap-1.5 border ${
+                                            active
+                                                ? 'bg-indigo-950/80 border-indigo-500/60 text-cyan-300 shadow-[0_0_8px_rgba(99,102,241,0.2)]'
+                                                : 'bg-slate-900/60 border-slate-800 text-slate-400 hover:text-slate-200 hover:border-slate-700'
+                                        }`}
+                                    >
+                                        <i className={`fa-solid ${s.icon} text-[10px] ${active ? 'text-cyan-400' : 'text-slate-500'}`}></i>
+                                        <span>{s.name}</span>
+                                    </button>
+                                    {idx < steps.length - 1 && (
+                                        <i className="fa-solid fa-angle-right text-[10px] text-slate-700 mx-0.5"></i>
+                                    )}
+                                </React.Fragment>
+                            );
+                        })}
+                    </div>
+                </div>
+            );
+        }
+
+        // =========================================================
+        // MODULE 0: FLOWCHART ARCHITECTURE & PIPELINE VIEW
+        // Implements complete 10-stage flowchart from user specifications
+        // =========================================================
+        function FlowchartArchitectureView({ currentUser, showToast, setActiveTab, onRunDemo, demoRunning }) {
+            const stages = [
+                {
+                    letter: 'A',
+                    title: 'Player Registration / Login',
+                    badge: 'Authentication Layer',
+                    badgeColor: 'border-indigo-500 text-indigo-300 bg-indigo-950/40',
+                    icon: 'fa-id-card-clip',
+                    color: 'from-indigo-600 to-blue-600',
+                    description: 'Secure credential authentication with Werkzeug password hashing. Generates user sessions and assigns roles: standard combatant (Player) or human auditor (Moderator).',
+                    tech: 'Werkzeug pbkdf2:sha256, SQLite users table, Flask session cookies',
+                    actionLabel: 'Sign In / Switch Account',
+                    actionIcon: 'fa-right-to-bracket',
+                    onAction: () => {
+                        showToast('Use the "Sign In / Register" button at top right to manage accounts.', 'info');
+                    }
+                },
+                {
+                    letter: 'B',
+                    title: 'Create or Join Game Room',
+                    badge: 'Multiplayer Lobby',
+                    badgeColor: 'border-cyan-500 text-cyan-300 bg-cyan-950/40',
+                    icon: 'fa-door-open',
+                    color: 'from-cyan-600 to-blue-600',
+                    description: 'Room Host creates match arena with dynamic room code (ARENA-XX). Public match discovery allows players to join roster, view host status, and establish ready state.',
+                    tech: 'game_rooms, game_players tables, unique room codes, REST API',
+                    actionLabel: 'Open Multiplayer Lobby',
+                    actionIcon: 'fa-gamepad',
+                    onAction: () => setActiveTab('lobby')
+                },
+                {
+                    letter: 'C',
+                    title: 'Wait for Minimum 5 Players',
+                    badge: 'Quorum Gate',
+                    badgeColor: 'border-amber-500 text-amber-300 bg-amber-950/40',
+                    icon: 'fa-users',
+                    color: 'from-amber-600 to-orange-600',
+                    description: 'Strict 5-Player Quorum Constraint. The Start Match button remains locked until at least 5 registered players have joined and are marked ready. Includes Quick-Fill Demo accelerator.',
+                    tech: 'Strict quorum validation (count >= 5), host-only authority check',
+                    actionLabel: 'Inspect Quorum Controls',
+                    actionIcon: 'fa-users-viewfinder',
+                    onAction: () => setActiveTab('lobby')
+                },
+                {
+                    letter: 'D',
+                    title: 'Start Game',
+                    badge: 'Match Host Authority',
+                    badgeColor: 'border-emerald-500 text-emerald-300 bg-emerald-950/40',
+                    icon: 'fa-play',
+                    color: 'from-emerald-600 to-teal-600',
+                    description: 'Match Host verifies 5+ player quorum and ready status, locks room, and triggers game launch. Telemetry collectors activate across all match participants simultaneously.',
+                    tech: 'Host start permission gate, room state lifecycle management',
+                    actionLabel: 'Go to Match Launch',
+                    actionIcon: 'fa-circle-play',
+                    onAction: () => setActiveTab('lobby')
+                },
+                {
+                    letter: 'E',
+                    title: 'Collect Player Gameplay Data',
+                    badge: 'Kinematic Telemetry Engine',
+                    badgeColor: 'border-purple-500 text-purple-300 bg-purple-950/40',
+                    icon: 'fa-crosshairs',
+                    color: 'from-purple-600 to-indigo-600',
+                    description: 'Captures 9 kinematic telemetry signals per player: Kills, Deaths, KDR, Headshot %, Accuracy %, Reaction Time (ms), Movement Speed, Actions/sec, Duration. Distinguishes live interactive play (is_simulated = 0) from batch simulation (is_simulated = 1).',
+                    tech: 'gameplay_stats schema, Interactive 2D Shooting Range, WebSocket streaming',
+                    actionLabel: 'Play Live Reflex Range',
+                    actionIcon: 'fa-gun',
+                    onAction: () => setActiveTab('gameplay')
+                },
+                {
+                    letter: 'F',
+                    title: 'ML Cheat Detection Model',
+                    badge: 'Random Forest Classifier',
+                    badgeColor: 'border-blue-500 text-blue-300 bg-blue-950/40',
+                    icon: 'fa-brain',
+                    color: 'from-blue-600 to-indigo-600',
+                    description: '120 decision trees trained on realistic multiplayer telemetry. Evaluates player kinematic features against learned biological limits and aim-locking distributions with 99.86% benchmark accuracy.',
+                    tech: 'Scikit-learn RandomForestClassifier, StandardScaler, Joblib persistence',
+                    actionLabel: 'Inspect Model Metrics',
+                    actionIcon: 'fa-chart-simple',
+                    onAction: () => setActiveTab('model')
+                },
+                {
+                    letter: 'G',
+                    title: 'Classify Players',
+                    badge: 'Inference Engine',
+                    badgeColor: 'border-violet-500 text-violet-300 bg-violet-950/40',
+                    icon: 'fa-calculator',
+                    color: 'from-violet-600 to-fuchsia-600',
+                    description: 'Evaluates multi-tree vote consensus to output posterior cheat probability % (0.0% to 100.0%) and runs forensic rule-based inspection (e.g. sub-120ms reflex, aimbot snap clustering).',
+                    tech: 'Predict_proba scaling, rule-based explainability flags, feature importances',
+                    actionLabel: 'View Telemetry Records',
+                    actionIcon: 'fa-table-list',
+                    onAction: () => setActiveTab('dashboard')
+                },
+                {
+                    letter: 'H',
+                    title: 'Legitimate / Suspicious / Cheating',
+                    badge: '3-Tier Categorization',
+                    badgeColor: 'border-rose-500 text-rose-300 bg-rose-950/40',
+                    icon: 'fa-scale-balanced',
+                    color: 'from-rose-600 to-red-600',
+                    description: 'Tri-state player classification: Legitimate (human physiological limits, prob < 35%), Suspicious (borderline anomalies, prob 35-70% queued for review), Cheating (blatant triggerbot/aimbot/speedhack, prob >= 70%).',
+                    tech: 'detection_results schema, 3-tier risk stratification, anomaly explanations',
+                    actionLabel: 'View 3-Tier Live Data',
+                    actionIcon: 'fa-layer-group',
+                    onAction: () => setActiveTab('dashboard')
+                },
+                {
+                    letter: 'I',
+                    title: 'Visualization Dashboard',
+                    badge: 'Interactive Chart Analytics',
+                    badgeColor: 'border-cyan-500 text-cyan-300 bg-cyan-950/40',
+                    icon: 'fa-chart-pie',
+                    color: 'from-cyan-600 to-emerald-600',
+                    description: 'Real-time Chart.js visual platform: 1) Bar Chart (Player vs Probability), 2) Doughnut Chart (3-Tier ratio), 3) Scatter Plot (Accuracy vs Reaction Time clustering), 4) Line Chart (Metric trends) + KPI counters.',
+                    tech: 'Chart.js 4.x Canvas, dynamic reactive datasets, telemetry inspection modal',
+                    actionLabel: 'Open Graphs Dashboard',
+                    actionIcon: 'fa-chart-line',
+                    onAction: () => setActiveTab('dashboard')
+                },
+                {
+                    letter: 'J',
+                    title: 'Moderator Review',
+                    badge: 'Human-in-the-Loop Audit',
+                    badgeColor: 'border-purple-500 text-purple-300 bg-purple-950/40',
+                    icon: 'fa-user-shield',
+                    color: 'from-purple-600 to-pink-600',
+                    description: 'Flagged players (Suspicious and Cheating) are queued for forensic audit. Human moderators inspect anomaly flags, review raw telemetry, and issue binding verdicts: Confirmed Cheating, Legitimate (Cleared), or Needs Further Review. Zero automated bans.',
+                    tech: 'moderator_reviews table, human verdict binding, disciplinary actions',
+                    actionLabel: 'Open Moderator Queue',
+                    actionIcon: 'fa-gavel',
+                    onAction: () => setActiveTab('moderator')
+                }
+            ];
+
+            return (
+                <div className="space-y-10">
+                    {/* Hero Architecture Banner */}
+                    <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-indigo-950/80 via-purple-950/60 to-slate-900 border border-indigo-500/30 p-8 lg:p-10 shadow-2xl">
+                        <div className="relative z-10 max-w-3xl">
+                            <span className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 text-xs font-mono font-semibold uppercase tracking-wider mb-4">
+                                <i className="fa-solid fa-diagram-project"></i> Complete System Architecture
+                            </span>
+                            <h1 className="text-3xl sm:text-4xl lg:text-5xl font-black text-white tracking-tight">
+                                Multiplayer In-Game Cheat Detection Architecture
+                            </h1>
+                            <p className="mt-4 text-slate-300 text-sm sm:text-base leading-relaxed">
+                                This end-to-end web platform implements the exact 10-stage pipeline from <strong className="text-indigo-400">Player Registration</strong> through <strong className="text-cyan-400">5-Player Lobby Quorum</strong>, <strong className="text-purple-400">Random Forest ML Inference</strong>, <strong className="text-rose-400">3-Tier Classification</strong>, <strong className="text-emerald-400">Visual Dashboard</strong>, to <strong className="text-amber-400">Human Moderator Review</strong>.
+                            </p>
+
+                            <div className="mt-6 flex flex-wrap items-center gap-4">
+                                <button
+                                    onClick={onRunDemo}
+                                    disabled={demoRunning}
+                                    className="px-6 py-3 rounded-2xl bg-gradient-to-r from-indigo-600 via-purple-600 to-indigo-600 hover:opacity-95 text-white font-bold text-sm shadow-xl shadow-indigo-600/30 transition flex items-center gap-2.5 disabled:opacity-50"
+                                >
+                                    <i className={`fa-solid ${demoRunning ? 'fa-spinner animate-spin' : 'fa-bolt'} text-amber-300 text-base`}></i>
+                                    <span>{demoRunning ? 'Running 10-Stage Pipeline...' : '⚡ Run Complete End-to-End Flow Demo'}</span>
+                                </button>
+                                <button
+                                    onClick={() => setActiveTab('dashboard')}
+                                    className="px-5 py-3 rounded-2xl bg-slate-900/90 hover:bg-slate-800 text-slate-200 border border-slate-700 font-semibold text-sm transition flex items-center gap-2"
+                                >
+                                    <i className="fa-solid fa-chart-pie text-cyan-400"></i>
+                                    <span>View Live Dashboard</span>
+                                </button>
+                            </div>
+                        </div>
+                        <div className="absolute -right-12 -bottom-12 w-96 h-96 bg-indigo-600/10 rounded-full blur-3xl pointer-events-none"></div>
+                    </div>
+
+                    {/* Mermaid Flow Diagram Visualizer */}
+                    <div className="bg-[#0f172a] border border-indigo-950/90 rounded-3xl p-6 lg:p-8 shadow-2xl">
+                        <div className="flex flex-wrap items-center justify-between gap-4 mb-6 pb-4 border-b border-slate-800">
+                            <div>
+                                <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                                    <i className="fa-solid fa-network-wired text-indigo-400"></i>
+                                    <span>Interactive Flowchart Diagram</span>
+                                </h2>
+                                <p className="text-xs text-slate-400 mt-0.5">
+                                    Click any stage in the flow below to jump directly into that module.
+                                </p>
+                            </div>
+                            <span className="px-3 py-1 rounded-full bg-slate-800 text-xs font-mono text-cyan-300 border border-slate-700">
+                                flowchart TD • 10 Connected Stages
+                            </span>
+                        </div>
+
+                        {/* Visual Flow Grid (A -> B -> C -> D -> E -> F -> G -> H -> I -> J) */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+                            {stages.map((stage, idx) => (
+                                <div
+                                    key={stage.letter}
+                                    onClick={stage.onAction}
+                                    className="group relative bg-[#090e1a] border border-indigo-950 hover:border-indigo-500/60 rounded-2xl p-4 transition-all duration-300 hover:shadow-xl hover:shadow-indigo-950/40 hover:-translate-y-1 cursor-pointer flex flex-col justify-between"
+                                >
+                                    <div>
+                                        <div className="flex items-center justify-between mb-3">
+                                            <span className="w-7 h-7 rounded-lg bg-indigo-600/20 text-indigo-400 border border-indigo-500/30 flex items-center justify-center font-mono font-bold text-xs">
+                                                {stage.letter}
+                                            </span>
+                                            <span className={`text-[9px] font-mono uppercase px-2 py-0.5 rounded border ${stage.badgeColor}`}>
+                                                {stage.badge}
+                                            </span>
+                                        </div>
+
+                                        <div className="flex items-center gap-2.5 mb-2">
+                                            <div className="w-8 h-8 rounded-xl bg-slate-800 group-hover:bg-indigo-600 transition flex items-center justify-center text-slate-300 group-hover:text-white text-sm">
+                                                <i className={`fa-solid ${stage.icon}`}></i>
+                                            </div>
+                                            <h3 className="text-sm font-bold text-white group-hover:text-cyan-300 transition leading-snug">
+                                                {stage.title}
+                                            </h3>
+                                        </div>
+
+                                        <p className="text-[11px] text-slate-400 line-clamp-3 leading-relaxed mt-2">
+                                            {stage.description}
+                                        </p>
+                                    </div>
+
+                                    <div className="mt-4 pt-3 border-t border-slate-800/80 flex items-center justify-between text-[11px] font-mono text-slate-400 group-hover:text-cyan-400">
+                                        <span>Jump to Stage</span>
+                                        <i className="fa-solid fa-arrow-right text-[10px] group-hover:translate-x-1 transition-transform"></i>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* Detailed Stage-by-Stage Architecture Breakdown */}
+                    <div className="space-y-6">
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <h2 className="text-2xl font-black text-white">Stage-by-Stage Technical Implementation</h2>
+                                <p className="text-xs text-slate-400 mt-1">Detailed examination of algorithms, protocols, and data structures.</p>
+                            </div>
+                            <span className="text-xs font-mono text-indigo-400">Stages A through J</span>
+                        </div>
+
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                            {stages.map((stage) => (
+                                <div key={stage.letter} className="bg-[#0f172a] border border-indigo-950/80 rounded-3xl p-6 shadow-xl relative overflow-hidden flex flex-col justify-between">
+                                    <div>
+                                        <div className="flex items-center justify-between mb-3">
+                                            <div className="flex items-center gap-3">
+                                                <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 to-purple-600 flex items-center justify-center text-white text-base font-bold shadow-md">
+                                                    {stage.letter}
+                                                </div>
+                                                <div>
+                                                    <h3 className="text-base font-bold text-white">{stage.title}</h3>
+                                                    <span className={`inline-block mt-0.5 text-[10px] font-mono uppercase px-2 py-0.5 rounded border ${stage.badgeColor}`}>
+                                                        {stage.badge}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                            <div className="w-10 h-10 rounded-2xl bg-slate-900 border border-slate-800 flex items-center justify-center text-slate-400 text-lg">
+                                                <i className={`fa-solid ${stage.icon}`}></i>
+                                            </div>
+                                        </div>
+
+                                        <p className="text-xs text-slate-300 leading-relaxed mt-4">
+                                            {stage.description}
+                                        </p>
+
+                                        <div className="mt-4 p-3 rounded-xl bg-slate-900/90 border border-slate-800 text-[11px] font-mono text-slate-400">
+                                            <strong className="text-indigo-400">Underlying Tech:</strong> {stage.tech}
+                                        </div>
+                                    </div>
+
+                                    <div className="mt-5 pt-4 border-t border-slate-800 flex items-center justify-between">
+                                        <span className="text-[11px] font-mono text-slate-500">Flowchart Node: [{stage.letter}]</span>
+                                        <button
+                                            onClick={stage.onAction}
+                                            className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-indigo-600 hover:text-white text-slate-300 text-xs font-semibold transition flex items-center gap-2 border border-slate-700"
+                                        >
+                                            <i className={`fa-solid ${stage.actionIcon} text-xs`}></i>
+                                            <span>{stage.actionLabel}</span>
+                                        </button>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
             );
         }
 
@@ -1198,10 +1631,12 @@
         // =========================================================
         // MODULE 5: LIVE DETECTION DASHBOARD & 4 INTERACTIVE GRAPHS
         // (Bar, Pie, Scatter, Line Charts using Chart.js)
+        // Stage H & I of the Flowchart: Classifies & Visualizes
         // =========================================================
         function DetectionDashboardView({ showToast, onSwitchToModerator }) {
             const [data, setData] = useState(null);
             const [loading, setLoading] = useState(true);
+            const [filterType, setFilterType] = useState('all'); // 'all', 'legitimate', 'suspicious', 'cheating'
 
             // Chart Canvas Refs
             const barChartRef = useRef(null);
@@ -1278,7 +1713,7 @@
                     });
                 }
 
-                // 2. Pie Chart: Legitimate vs Suspicious Players
+                // 2. Doughnut / Pie Chart: 3-Tier Classification (Legitimate, Suspicious, Cheating)
                 if (pieChartRef.current) {
                     if (pieInstance.current) pieInstance.current.destroy();
                     const ctx = pieChartRef.current.getContext('2d');
@@ -1288,7 +1723,7 @@
                             labels: data.charts.pie.labels,
                             datasets: [{
                                 data: data.charts.pie.data,
-                                backgroundColor: ['#10b981', '#ef4444'],
+                                backgroundColor: ['#10b981', '#f59e0b', '#ef4444'],
                                 borderColor: '#0f172a',
                                 borderWidth: 3
                             }]
@@ -1307,11 +1742,13 @@
                 }
 
                 // 3. Scatter Plot: Accuracy (%) vs Reaction Time (ms)
+                // (Isolates biological human cluster vs anomalous vs superhuman cheater cluster)
                 if (scatterChartRef.current) {
                     if (scatterInstance.current) scatterInstance.current.destroy();
                     const ctx = scatterChartRef.current.getContext('2d');
                     const legitPoints = data.charts.scatter.filter(p => p.prediction === 'Legitimate');
-                    const cheatPoints = data.charts.scatter.filter(p => p.prediction === 'Suspicious');
+                    const suspiciousPoints = data.charts.scatter.filter(p => p.prediction === 'Suspicious');
+                    const cheatPoints = data.charts.scatter.filter(p => p.prediction === 'Cheating');
 
                     scatterInstance.current = new Chart(ctx, {
                         type: 'scatter',
@@ -1321,15 +1758,25 @@
                                     label: 'Legitimate Human Cluster',
                                     data: legitPoints.map(p => ({ x: p.x, y: p.y })),
                                     backgroundColor: 'rgba(16, 185, 129, 0.75)',
+                                    borderColor: '#10b981',
                                     pointRadius: 6,
                                     pointHoverRadius: 9
                                 },
                                 {
-                                    label: 'Superhuman / Aimbot Cluster',
-                                    data: cheatPoints.map(p => ({ x: p.x, y: p.y })),
-                                    backgroundColor: 'rgba(239, 68, 68, 0.85)',
+                                    label: 'Suspicious Anomalies Cluster',
+                                    data: suspiciousPoints.map(p => ({ x: p.x, y: p.y })),
+                                    backgroundColor: 'rgba(245, 158, 11, 0.85)',
+                                    borderColor: '#f59e0b',
                                     pointRadius: 7,
                                     pointHoverRadius: 10
+                                },
+                                {
+                                    label: 'Cheating / Superhuman Cluster',
+                                    data: cheatPoints.map(p => ({ x: p.x, y: p.y })),
+                                    backgroundColor: 'rgba(239, 68, 68, 0.9)',
+                                    borderColor: '#ef4444',
+                                    pointRadius: 8,
+                                    pointHoverRadius: 11
                                 }
                             ]
                         },
@@ -1427,14 +1874,27 @@
                 );
             }
 
+            const filteredRecords = data.records.filter(r => {
+                if (filterType === 'all') return true;
+                if (filterType === 'legitimate') return r.prediction === 'Legitimate';
+                if (filterType === 'suspicious') return r.prediction === 'Suspicious';
+                if (filterType === 'cheating') return r.prediction === 'Cheating';
+                return true;
+            });
+
             return (
                 <div className="space-y-8">
                     {/* Header Controls */}
                     <div className="flex flex-wrap items-center justify-between gap-4">
                         <div>
+                            <div className="flex items-center gap-2 mb-1">
+                                <span className="px-2.5 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 text-[10px] font-mono font-semibold uppercase">
+                                    Flowchart Stages H & I
+                                </span>
+                            </div>
                             <h2 className="text-3xl font-black text-white tracking-tight">Live Detection Dashboard</h2>
                             <p className="text-xs text-slate-400 mt-1">
-                                Real-time behavioral telemetry analyzed by the Random Forest classifier.
+                                Real-time behavioral telemetry analyzed by the Random Forest classifier into 3 classifications.
                             </p>
                         </div>
                         <div className="flex items-center gap-3">
@@ -1454,31 +1914,38 @@
                         </div>
                     </div>
 
-                    {/* KPI Statistics Grid */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                    {/* KPI Statistics Grid (5 Metrics including 3-Tier Classification) */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
                         <div className="bg-[#0f172a] border border-indigo-950/80 p-5 rounded-2xl shadow-lg relative overflow-hidden">
-                            <div className="text-xs font-mono uppercase text-slate-400 font-semibold">Total Players Evaluated</div>
+                            <div className="text-xs font-mono uppercase text-slate-400 font-semibold">Total Evaluated</div>
                             <div className="text-3xl font-black text-white font-mono mt-2">{data.kpi.total_players}</div>
-                            <div className="text-[11px] text-slate-500 mt-1">Across all competitive matches</div>
+                            <div className="text-[11px] text-slate-500 mt-1">Across all match sessions</div>
                             <i className="fa-solid fa-users absolute right-4 bottom-4 text-4xl text-slate-800/40 pointer-events-none"></i>
                         </div>
 
                         <div className="bg-[#0f172a] border border-emerald-950/60 p-5 rounded-2xl shadow-lg relative overflow-hidden">
                             <div className="text-xs font-mono uppercase text-emerald-400 font-semibold">Legitimate Players</div>
                             <div className="text-3xl font-black text-emerald-400 font-mono mt-2">{data.kpi.legitimate_players}</div>
-                            <div className="text-[11px] text-slate-500 mt-1">Biomechanical human tracking verified</div>
+                            <div className="text-[11px] text-slate-500 mt-1">Normal human physiology verified</div>
                             <i className="fa-solid fa-shield-check absolute right-4 bottom-4 text-4xl text-emerald-950/40 pointer-events-none"></i>
                         </div>
 
-                        <div className="bg-[#0f172a] border border-red-950/60 p-5 rounded-2xl shadow-lg relative overflow-hidden">
-                            <div className="text-xs font-mono uppercase text-red-400 font-semibold">Suspicious / Flagged</div>
-                            <div className="text-3xl font-black text-red-400 font-mono mt-2">{data.kpi.suspicious_players}</div>
-                            <div className="text-[11px] text-slate-500 mt-1">Queued for human moderator audit</div>
-                            <i className="fa-solid fa-triangle-exclamation absolute right-4 bottom-4 text-4xl text-red-950/40 pointer-events-none"></i>
+                        <div className="bg-[#0f172a] border border-amber-950/60 p-5 rounded-2xl shadow-lg relative overflow-hidden">
+                            <div className="text-xs font-mono uppercase text-amber-400 font-semibold">Suspicious / Anomalous</div>
+                            <div className="text-3xl font-black text-amber-400 font-mono mt-2">{data.kpi.suspicious_players}</div>
+                            <div className="text-[11px] text-slate-500 mt-1">Queued for moderator audit</div>
+                            <i className="fa-solid fa-triangle-exclamation absolute right-4 bottom-4 text-4xl text-amber-950/40 pointer-events-none"></i>
                         </div>
 
-                        <div className="bg-[#0f172a] border border-indigo-950/80 p-5 rounded-2xl shadow-lg relative overflow-hidden">
-                            <div className="text-xs font-mono uppercase text-cyan-400 font-semibold">Average Cheat Risk</div>
+                        <div className="bg-[#0f172a] border border-red-950/60 p-5 rounded-2xl shadow-lg relative overflow-hidden">
+                            <div className="text-xs font-mono uppercase text-red-400 font-semibold">Cheating / High Risk</div>
+                            <div className="text-3xl font-black text-red-400 font-mono mt-2">{data.kpi.cheating_players || 0}</div>
+                            <div className="text-[11px] text-slate-500 mt-1">Blatant cheat signature detected</div>
+                            <i className="fa-solid fa-ban absolute right-4 bottom-4 text-4xl text-red-950/40 pointer-events-none"></i>
+                        </div>
+
+                        <div className="bg-[#0f172a] border border-cyan-950/60 p-5 rounded-2xl shadow-lg relative overflow-hidden">
+                            <div className="text-xs font-mono uppercase text-cyan-400 font-semibold">Avg Cheat Probability</div>
                             <div className="text-3xl font-black text-cyan-400 font-mono mt-2">{data.kpi.avg_cheat_probability}%</div>
                             <div className="text-[11px] text-slate-500 mt-1">Random Forest probability mean</div>
                             <i className="fa-solid fa-gauge-high absolute right-4 bottom-4 text-4xl text-cyan-950/40 pointer-events-none"></i>
@@ -1501,14 +1968,14 @@
                             </div>
                         </div>
 
-                        {/* 2. Doughnut / Pie Chart: Legit vs Suspicious */}
+                        {/* 2. Doughnut / Pie Chart: 3-Tier Classification Ratio */}
                         <div className="bg-[#0f172a] border border-indigo-950/80 p-6 rounded-3xl shadow-xl">
                             <div className="flex items-center justify-between mb-4">
                                 <div>
-                                    <h3 className="font-bold text-white text-base">Legitimate vs Suspicious Ratio</h3>
-                                    <p className="text-xs text-slate-400">Class composition across all room sessions</p>
+                                    <h3 className="font-bold text-white text-base">3-Tier Classification Ratio</h3>
+                                    <p className="text-xs text-slate-400">Legitimate vs Suspicious vs Cheating distribution</p>
                                 </div>
-                                <span className="px-2.5 py-1 rounded bg-slate-800 text-[11px] font-mono text-purple-400">Pie Chart</span>
+                                <span className="px-2.5 py-1 rounded bg-slate-800 text-[11px] font-mono text-purple-400">Doughnut Chart</span>
                             </div>
                             <div className="h-64 flex items-center justify-center">
                                 <canvas ref={pieChartRef}></canvas>
@@ -1519,8 +1986,8 @@
                         <div className="bg-[#0f172a] border border-indigo-950/80 p-6 rounded-3xl shadow-xl">
                             <div className="flex items-center justify-between mb-4">
                                 <div>
-                                    <h3 className="font-bold text-white text-base">Accuracy vs. Reaction Time</h3>
-                                    <p className="text-xs text-slate-400">Isolates non-human triggerbots & aimbot snaps</p>
+                                    <h3 className="font-bold text-white text-base">Accuracy vs. Reaction Time Clusters</h3>
+                                    <p className="text-xs text-slate-400">Clusters human limits vs bot triggerbots & aimbots</p>
                                 </div>
                                 <span className="px-2.5 py-1 rounded bg-slate-800 text-[11px] font-mono text-cyan-400">Scatter Plot</span>
                             </div>
@@ -1544,16 +2011,57 @@
                         </div>
                     </div>
 
-                    {/* Detection Results Table */}
+                    {/* Detection Results Table with Filter Tabs */}
                     <div className="bg-[#0f172a] border border-indigo-950/80 rounded-3xl p-6 shadow-xl overflow-hidden">
-                        <div className="flex items-center justify-between mb-6">
+                        <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
                             <div>
-                                <h3 className="font-bold text-white text-lg">Detailed Telemetry & Detection Table</h3>
-                                <p className="text-xs text-slate-400">Live per-player evaluation with Random Forest scores</p>
+                                <h3 className="font-bold text-white text-lg">Detailed Telemetry & Classification Table</h3>
+                                <p className="text-xs text-slate-400">Live per-player evaluation with Random Forest scores and anomaly flags</p>
                             </div>
-                            <span className="text-xs text-slate-400 font-mono">
-                                Showing {data.records.length} records
-                            </span>
+
+                            {/* Classification Filter Tabs */}
+                            <div className="flex flex-wrap items-center gap-2">
+                                <button
+                                    onClick={() => setFilterType('all')}
+                                    className={`px-3 py-1 rounded-xl text-xs font-semibold transition ${
+                                        filterType === 'all'
+                                            ? 'bg-indigo-600 text-white shadow'
+                                            : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
+                                    }`}
+                                >
+                                    All ({data.records.length})
+                                </button>
+                                <button
+                                    onClick={() => setFilterType('legitimate')}
+                                    className={`px-3 py-1 rounded-xl text-xs font-semibold transition ${
+                                        filterType === 'legitimate'
+                                            ? 'bg-emerald-600 text-white shadow'
+                                            : 'bg-slate-900 text-emerald-400 hover:text-white border border-slate-800'
+                                    }`}
+                                >
+                                    Legitimate ({data.kpi.legitimate_players})
+                                </button>
+                                <button
+                                    onClick={() => setFilterType('suspicious')}
+                                    className={`px-3 py-1 rounded-xl text-xs font-semibold transition ${
+                                        filterType === 'suspicious'
+                                            ? 'bg-amber-600 text-white shadow'
+                                            : 'bg-slate-900 text-amber-400 hover:text-white border border-slate-800'
+                                    }`}
+                                >
+                                    Suspicious ({data.kpi.suspicious_players})
+                                </button>
+                                <button
+                                    onClick={() => setFilterType('cheating')}
+                                    className={`px-3 py-1 rounded-xl text-xs font-semibold transition ${
+                                        filterType === 'cheating'
+                                            ? 'bg-red-600 text-white shadow'
+                                            : 'bg-slate-900 text-red-400 hover:text-white border border-slate-800'
+                                    }`}
+                                >
+                                    Cheating ({data.kpi.cheating_players || 0})
+                                </button>
+                            </div>
                         </div>
 
                         <div className="overflow-x-auto">
@@ -1568,59 +2076,73 @@
                                         <th className="py-3 px-3">Reaction</th>
                                         <th className="py-3 px-3">Speed</th>
                                         <th className="py-3 px-3">Cheat Prob</th>
-                                        <th className="py-3 px-3">Prediction</th>
-                                        <th className="py-3 px-3">Moderator Action</th>
+                                        <th className="py-3 px-3">Classification</th>
+                                        <th className="py-3 px-3">Moderator Status</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-800/60 font-sans">
-                                    {data.records.map((r, i) => (
-                                        <tr key={i} className="hover:bg-slate-900/60 transition">
-                                            <td className="py-3.5 px-3 font-semibold text-white flex items-center gap-2">
-                                                <div 
-                                                    className="w-6 h-6 rounded-md flex items-center justify-center font-bold text-[10px] text-white"
-                                                    style={{ backgroundColor: r.avatar_color || '#6366f1' }}
-                                                >
-                                                    {r.username.substring(0, 2).toUpperCase()}
-                                                </div>
-                                                <span>{r.username}</span>
-                                            </td>
-                                            <td className="py-3.5 px-3">
-                                                <span className={`px-2 py-0.5 rounded text-[10px] font-mono ${
-                                                    r.is_simulated === 0 ? 'bg-cyan-950 text-cyan-300 border border-cyan-800' : 'bg-slate-800 text-slate-400'
-                                                }`}>
-                                                    {r.is_simulated === 0 ? 'Real Live' : 'Simulated'}
-                                                </span>
-                                            </td>
-                                            <td className="py-3.5 px-3 font-mono">{r.kills} / {r.deaths} (KDR: {r.kdr})</td>
-                                            <td className="py-3.5 px-3 font-mono">{r.accuracy_pct}%</td>
-                                            <td className="py-3.5 px-3 font-mono">{r.headshot_pct}%</td>
-                                            <td className="py-3.5 px-3 font-mono">{r.reaction_time_ms} ms</td>
-                                            <td className="py-3.5 px-3 font-mono">{r.movement_speed} m/s</td>
-                                            <td className="py-3.5 px-3 font-mono font-bold">
-                                                <span className={r.cheat_probability >= 50 ? 'text-red-400' : 'text-emerald-400'}>
-                                                    {r.cheat_probability}%
-                                                </span>
-                                            </td>
-                                            <td className="py-3.5 px-3">
-                                                <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase ${
-                                                    r.prediction === 'Suspicious' 
-                                                        ? 'bg-red-950 text-red-400 border border-red-800/60 shadow-[0_0_8px_rgba(239,68,68,0.2)]' 
-                                                        : 'bg-emerald-950 text-emerald-400 border border-emerald-800/60'
-                                                }`}>
-                                                    {r.prediction}
-                                                </span>
-                                            </td>
-                                            <td className="py-3.5 px-3 text-slate-400 font-mono text-[11px]">
-                                                {r.moderator_decision === 'Confirmed Cheating' ? (
-                                                    <span className="text-red-400 font-bold"><i className="fa-solid fa-ban mr-1"></i> Confirmed</span>
-                                                ) : r.moderator_decision === 'Legitimate' ? (
-                                                    <span className="text-emerald-400 font-bold"><i className="fa-solid fa-check mr-1"></i> Cleared</span>
-                                                ) : (
-                                                    <span className="text-amber-400"><i className="fa-solid fa-clock mr-1"></i> Under Review</span>
-                                                )}
+                                    {filteredRecords.length === 0 ? (
+                                        <tr>
+                                            <td colSpan="10" className="py-8 text-center text-slate-500 font-mono">
+                                                No records found for filter: {filterType}. Run a match in the Lobby!
                                             </td>
                                         </tr>
-                                    ))}
+                                    ) : (
+                                        filteredRecords.map((r, i) => (
+                                            <tr key={i} className="hover:bg-slate-900/60 transition">
+                                                <td className="py-3.5 px-3 font-semibold text-white flex items-center gap-2">
+                                                    <div 
+                                                        className="w-6 h-6 rounded-md flex items-center justify-center font-bold text-[10px] text-white"
+                                                        style={{ backgroundColor: r.avatar_color || '#6366f1' }}
+                                                    >
+                                                        {r.username.substring(0, 2).toUpperCase()}
+                                                    </div>
+                                                    <span>{r.username}</span>
+                                                </td>
+                                                <td className="py-3.5 px-3">
+                                                    <span className={`px-2 py-0.5 rounded text-[10px] font-mono ${
+                                                        r.is_simulated === 0 ? 'bg-cyan-950 text-cyan-300 border border-cyan-800' : 'bg-slate-800 text-slate-400'
+                                                    }`}>
+                                                        {r.is_simulated === 0 ? 'Real Live' : 'Simulated'}
+                                                    </span>
+                                                </td>
+                                                <td className="py-3.5 px-3 font-mono">{r.kills} / {r.deaths} (KDR: {r.kdr})</td>
+                                                <td className="py-3.5 px-3 font-mono">{r.accuracy_pct}%</td>
+                                                <td className="py-3.5 px-3 font-mono">{r.headshot_pct}%</td>
+                                                <td className="py-3.5 px-3 font-mono">{r.reaction_time_ms} ms</td>
+                                                <td className="py-3.5 px-3 font-mono">{r.movement_speed} m/s</td>
+                                                <td className="py-3.5 px-3 font-mono font-bold">
+                                                    <span className={r.cheat_probability >= 70 ? 'text-red-400' : r.cheat_probability >= 35 ? 'text-amber-400' : 'text-emerald-400'}>
+                                                        {r.cheat_probability}%
+                                                    </span>
+                                                </td>
+                                                <td className="py-3.5 px-3">
+                                                    <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase inline-flex items-center gap-1.5 ${
+                                                        r.prediction === 'Cheating' 
+                                                            ? 'bg-red-950/80 text-red-400 border border-red-800/80 shadow-[0_0_8px_rgba(239,68,68,0.3)]' 
+                                                            : r.prediction === 'Suspicious'
+                                                            ? 'bg-amber-950/80 text-amber-400 border border-amber-800/80 shadow-[0_0_8px_rgba(245,158,11,0.25)]'
+                                                            : 'bg-emerald-950/80 text-emerald-400 border border-emerald-800/80 shadow-[0_0_8px_rgba(16,185,129,0.2)]'
+                                                    }`}>
+                                                        <i className={`fa-solid ${
+                                                            r.prediction === 'Cheating' ? 'fa-ban' :
+                                                            r.prediction === 'Suspicious' ? 'fa-triangle-exclamation' : 'fa-circle-check'
+                                                        } text-[9px]`}></i>
+                                                        {r.prediction}
+                                                    </span>
+                                                </td>
+                                                <td className="py-3.5 px-3 text-slate-400 font-mono text-[11px]">
+                                                    {r.moderator_decision === 'Confirmed Cheating' ? (
+                                                        <span className="text-red-400 font-bold"><i className="fa-solid fa-ban mr-1"></i> Confirmed</span>
+                                                    ) : r.moderator_decision === 'Legitimate' ? (
+                                                        <span className="text-emerald-400 font-bold"><i className="fa-solid fa-check mr-1"></i> Cleared</span>
+                                                    ) : (
+                                                        <span className="text-amber-400"><i className="fa-solid fa-clock mr-1"></i> Under Review</span>
+                                                    )}
+                                                </td>
+                                            </tr>
+                                        ))
+                                    )}
                                 </tbody>
                             </table>
                         </div>
@@ -1631,6 +2153,7 @@
 
         // =========================================================
         // MODULE 6: MODERATOR DASHBOARD & HUMAN-IN-THE-LOOP AUDIT
+        // Stage J of the Flowchart: Forensic Human Review
         // =========================================================
         function ModeratorView({ currentUser, showToast }) {
             const [queue, setQueue] = useState([]);
@@ -1640,6 +2163,7 @@
             const [actionTaken, setActionTaken] = useState('Under Observation');
             const [notes, setNotes] = useState('');
             const [submitting, setSubmitting] = useState(false);
+            const [filterCategory, setFilterCategory] = useState('all');
 
             const fetchQueue = async () => {
                 try {
@@ -1698,24 +2222,38 @@
                 }
             };
 
+            const filteredQueue = queue.filter(item => {
+                if (filterCategory === 'all') return true;
+                if (filterCategory === 'cheating') return item.prediction === 'Cheating';
+                if (filterCategory === 'suspicious') return item.prediction === 'Suspicious';
+                if (filterCategory === 'pending') return item.decision === 'Under Review' || item.decision === 'Needs Further Review';
+                if (filterCategory === 'resolved') return item.decision === 'Confirmed Cheating' || item.decision === 'Legitimate';
+                return true;
+            });
+
             return (
                 <div className="space-y-8">
                     {/* Header Notice */}
                     <div className="p-6 rounded-3xl bg-gradient-to-r from-purple-950/60 to-indigo-950/60 border border-purple-500/30 shadow-xl">
+                        <div className="flex items-center gap-2 mb-2">
+                            <span className="px-2.5 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/30 text-[10px] font-mono font-semibold uppercase">
+                                Flowchart Stage J: Human-in-the-Loop Audit
+                            </span>
+                        </div>
                         <div className="flex items-center gap-3 mb-2">
-                            <span className="w-8 h-8 rounded-lg bg-purple-600/30 flex items-center justify-center text-purple-400">
+                            <span className="w-9 h-9 rounded-xl bg-purple-600/30 flex items-center justify-center text-purple-400">
                                 <i className="fa-solid fa-gavel"></i>
                             </span>
-                            <h2 className="text-2xl font-black text-white">Moderator Review Center</h2>
+                            <h2 className="text-2xl font-black text-white">Forensic Moderator Review Center</h2>
                         </div>
                         <p className="text-xs text-slate-300 max-w-2xl leading-relaxed">
-                            <strong className="text-purple-300">Human-in-the-Loop Protocol:</strong> Machine Learning probabilities flag anomalous gameplay patterns, but the system never executes automatic bans without human verification. Moderators investigate telemetry and issue final determinations.
+                            <strong className="text-purple-300">Human-in-the-Loop Protocol:</strong> Machine Learning classification stratifies players into <span className="text-emerald-400">Legitimate</span>, <span className="text-amber-400">Suspicious</span>, and <span className="text-red-400">Cheating</span>. However, the system <strong>never executes automated bans</strong> solely on ML confidence. Human moderators inspect kinematic anomalies and issue binding verdicts.
                         </p>
                     </div>
 
                     {/* Stats Ribbon */}
                     {stats && (
-                        <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                             <div className="p-4 bg-[#0f172a] rounded-2xl border border-slate-800 text-center">
                                 <div className="text-xs font-mono text-slate-400">Total Flagged</div>
                                 <div className="text-2xl font-black text-white font-mono mt-1">{stats.total_flagged}</div>
@@ -1735,13 +2273,61 @@
                         </div>
                     )}
 
-                    {/* Audit Queue Table */}
+                    {/* Audit Queue Table with Filter Tabs */}
                     <div className="bg-[#0f172a] border border-indigo-950/80 rounded-3xl p-6 shadow-xl">
-                        <h3 className="font-bold text-white text-base mb-4">Suspicious Telemetry Queue</h3>
+                        <div className="flex flex-wrap items-center justify-between gap-4 mb-5">
+                            <div>
+                                <h3 className="font-bold text-white text-base">Suspicious & Cheating Telemetry Queue</h3>
+                                <p className="text-xs text-slate-400">Human audit queue for players flagged by Random Forest model</p>
+                            </div>
 
-                        {queue.length === 0 ? (
+                            <div className="flex flex-wrap items-center gap-2">
+                                <button
+                                    onClick={() => setFilterCategory('all')}
+                                    className={`px-3 py-1 rounded-xl text-xs font-semibold transition ${
+                                        filterCategory === 'all'
+                                            ? 'bg-purple-600 text-white shadow'
+                                            : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
+                                    }`}
+                                >
+                                    All ({queue.length})
+                                </button>
+                                <button
+                                    onClick={() => setFilterCategory('cheating')}
+                                    className={`px-3 py-1 rounded-xl text-xs font-semibold transition ${
+                                        filterCategory === 'cheating'
+                                            ? 'bg-red-600 text-white shadow'
+                                            : 'bg-slate-900 text-red-400 hover:text-white border border-slate-800'
+                                    }`}
+                                >
+                                    Cheating Flags
+                                </button>
+                                <button
+                                    onClick={() => setFilterCategory('suspicious')}
+                                    className={`px-3 py-1 rounded-xl text-xs font-semibold transition ${
+                                        filterCategory === 'suspicious'
+                                            ? 'bg-amber-600 text-white shadow'
+                                            : 'bg-slate-900 text-amber-400 hover:text-white border border-slate-800'
+                                    }`}
+                                >
+                                    Suspicious Flags
+                                </button>
+                                <button
+                                    onClick={() => setFilterCategory('pending')}
+                                    className={`px-3 py-1 rounded-xl text-xs font-semibold transition ${
+                                        filterCategory === 'pending'
+                                            ? 'bg-cyan-600 text-white shadow'
+                                            : 'bg-slate-900 text-cyan-400 hover:text-white border border-slate-800'
+                                    }`}
+                                >
+                                    Pending Audit
+                                </button>
+                            </div>
+                        </div>
+
+                        {filteredQueue.length === 0 ? (
                             <div className="text-center py-12 text-slate-500 font-mono text-xs">
-                                No suspicious gameplay records found. Run a match in the Lobby!
+                                No records matching filter: {filterCategory}. Run a match in the Lobby!
                             </div>
                         ) : (
                             <div className="overflow-x-auto">
@@ -1749,20 +2335,30 @@
                                     <thead>
                                         <tr className="border-b border-slate-800 text-slate-400 font-mono uppercase text-[11px]">
                                             <th className="py-3 px-3">Player</th>
+                                            <th className="py-3 px-3">ML Class</th>
                                             <th className="py-3 px-3">Probability</th>
                                             <th className="py-3 px-3">Accuracy</th>
                                             <th className="py-3 px-3">Headshots</th>
                                             <th className="py-3 px-3">Reaction Time</th>
                                             <th className="py-3 px-3">Detected Anomalies</th>
-                                            <th className="py-3 px-3">Status</th>
-                                            <th className="py-3 px-3">Action</th>
+                                            <th className="py-3 px-3">Moderator Verdict</th>
+                                            <th className="py-3 px-3">Audit Action</th>
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-slate-800/60 font-sans">
-                                        {queue.map(item => (
+                                        {filteredQueue.map(item => (
                                             <tr key={item.detection_id} className="hover:bg-slate-900/60 transition">
                                                 <td className="py-3.5 px-3 font-semibold text-white">
                                                     {item.username}
+                                                </td>
+                                                <td className="py-3.5 px-3">
+                                                    <span className={`px-2 py-0.5 rounded text-[10px] font-mono uppercase font-bold ${
+                                                        item.prediction === 'Cheating' ? 'bg-red-950 text-red-400 border border-red-800' :
+                                                        item.prediction === 'Suspicious' ? 'bg-amber-950 text-amber-400 border border-amber-800' :
+                                                        'bg-emerald-950 text-emerald-400 border border-emerald-800'
+                                                    }`}>
+                                                        {item.prediction}
+                                                    </span>
                                                 </td>
                                                 <td className="py-3.5 px-3 font-mono font-bold text-red-400">
                                                     {item.cheat_probability}%
@@ -1788,7 +2384,7 @@
                                                         className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs shadow transition flex items-center gap-1.5"
                                                     >
                                                         <i className="fa-solid fa-magnifying-glass text-[10px]"></i>
-                                                        <span>Review</span>
+                                                        <span>Investigate</span>
                                                     </button>
                                                 </td>
                                             </tr>
@@ -2008,6 +2604,7 @@
 
         // Render React Application
         ReactDOM.render(<App />, document.getElementById('root'));
+    {% endraw %}
     </script>
 </body>
 </html>

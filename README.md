@@ -7,6 +7,40 @@
 
 Online competitive multiplayer gaming is heavily affected by unauthorized third-party cheats such as **aimbots**, **triggerbots**, **speedhacks**, and **rapid-fire macros**. This project builds an end-to-end **Multiplayer In-Game Cheat Detection System** designed for academic evaluation, research, and viva demonstration.
 
+---
+
+## 🔄 End-to-End System Pipeline Flowchart
+
+```mermaid
+flowchart TD
+    A[Player Registration / Login] --> B[Create or Join Game Room]
+    B --> C[Wait for Minimum 5 Players]
+    C --> D[Start Game]
+    D --> E[Collect Player Gameplay Data]
+    E --> F[ML Cheat Detection Model]
+    F --> G[Classify Players]
+    G --> H[Legitimate / Suspicious / Cheating]
+    H --> I[Visualization Dashboard]
+    I --> J[Moderator Review]
+```
+
+### Detailed Flowchart Node Mapping
+
+| Node | Stage | Implementation & Technical Specs |
+| :--- | :--- | :--- |
+| **A** | **Player Registration / Login** | Secure authentication with Werkzeug password hashing. Roles distinguish combatants (`player`) from forensic auditors (`moderator`). Seeded accounts: `player1` to `player5` & `moderator1` (pw: `password123`). |
+| **B** | **Create or Join Game Room** | Match lobby system with unique dynamic room codes (`ARENA-XX`). Players browse active rooms, join rosters, and signal ready status. |
+| **C** | **Wait for Minimum 5 Players** | **Strict 5-Player Quorum Gate**. Match start button remains locked until at least 5 registered players join and ready up. Includes "Quick-Fill 5 Players (Demo)" for presentations. |
+| **D** | **Start Game** | Match launch control restricted exclusively to Room Host. Locks lobby and triggers simultaneous telemetry collection. |
+| **E** | **Collect Player Gameplay Data** | Extracts 9 kinematic telemetry dimensions per player: Kills, Deaths, KDR, Headshot %, Accuracy %, Reaction Time (ms), Speed, Actions/sec, Duration. Distinguishes live play (`is_simulated = 0`) from simulation (`is_simulated = 1`). |
+| **F** | **ML Cheat Detection Model** | 120-tree Random Forest classifier with `StandardScaler` feature normalization, trained on 3,500 kinematic match records (99.86% accuracy). |
+| **G** | **Classify Players** | Evaluates decision tree vote consensus to output posterior cheat probability % (0.0% to 100.0%) and detects rule-based kinematic anomalies (e.g. sub-120ms reaction, aimbot snaps). |
+| **H** | **Legitimate / Suspicious / Cheating** | **3-Tier Categorization**: <br>• 🟢 **Legitimate**: Normal human limits (Reaction 180–350ms, Accuracy <60%, Prob <35%)<br>• 🟡 **Suspicious**: Borderline anomalies (Prob 35–70%, APS >12) queued for audit<br>• 🔴 **Cheating**: Blatant cheat signatures (Reaction <120ms, Headshot ≥70%, Prob ≥70%). |
+| **I** | **Visualization Dashboard** | Real-time analytics with 4 Chart.js visualizations: 1) Bar Chart (Player vs Probability), 2) Doughnut Chart (3-Tier ratio), 3) Scatter Plot (Accuracy vs Reaction Time clustering), 4) Line Chart (Match telemetry trends) + 5 KPI counters and searchable table. |
+| **J** | **Moderator Review** | **Human-in-the-Loop Audit Center**. Flagged players (`Suspicious` and `Cheating`) are queued for human forensic investigation. Human moderators inspect anomaly flags and submit binding verdicts: `Confirmed Cheating`, `Legitimate (Cleared)`, or `Needs Further Review`. **Strictly no automated bans**. |
+
+---
+
 ### Key Functional Highlights
 - **Multiplayer Room Lobby**: Players can register, log in, create or join multiplayer match rooms with dynamic room codes.
 - **Strict 5-Player Quorum**: Matches **require a minimum of 5 players** before the game can start. The Start Game control is disabled for everyone except the Room Host, and stays locked until the 5-player threshold is met (e.g. `3/5` -> `5/5`).

@@ -29,39 +29,39 @@
     "feature_importances": [
         {
             "feature": "accuracy_pct",
-            "importance": 0.3189
+            "importance": 0.3214
         },
         {
             "feature": "headshot_pct",
-            "importance": 0.2446
+            "importance": 0.2427
         },
         {
             "feature": "kdr",
-            "importance": 0.175
+            "importance": 0.1551
         },
         {
             "feature": "reaction_time_ms",
-            "importance": 0.1199
-        },
-        {
-            "feature": "movement_speed",
-            "importance": 0.0465
-        },
-        {
-            "feature": "actions_per_second",
-            "importance": 0.0423
+            "importance": 0.1203
         },
         {
             "feature": "kills",
-            "importance": 0.0394
+            "importance": 0.0584
+        },
+        {
+            "feature": "movement_speed",
+            "importance": 0.0464
+        },
+        {
+            "feature": "actions_per_second",
+            "importance": 0.0435
         },
         {
             "feature": "deaths",
-            "importance": 0.0106
+            "importance": 0.01
         },
         {
             "feature": "session_duration_s",
-            "importance": 0.0028
+            "importance": 0.0019
         }
     ],
     "thresholds": {

@@ -42,7 +42,9 @@ CREATE TABLE IF NOT EXISTS game_players (
     user_id INTEGER NOT NULL,
     is_host INTEGER NOT NULL DEFAULT 0, -- 1 if host, 0 otherwise
     is_bot INTEGER NOT NULL DEFAULT 0,  -- 1 if simulated player, 0 if real user
-    player_status VARCHAR(20) NOT NULL DEFAULT 'ready', -- 'ready', 'playing', 'finished'
+    player_status VARCHAR(20) NOT NULL DEFAULT 'ready', -- 'ready', 'not_ready', 'playing', 'finished'
+    is_online INTEGER NOT NULL DEFAULT 1, -- 1 if connected, 0 if offline
+    score INTEGER NOT NULL DEFAULT 0,    -- Real-time match score
     joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(room_id, user_id),
     FOREIGN KEY (room_id) REFERENCES game_rooms(room_id) ON DELETE CASCADE,

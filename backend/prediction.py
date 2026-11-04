@@ -148,15 +148,24 @@ def predict_player_cheat(stats_dict):
         else:
             prob = 96.2
 
-    # Suspicion threshold: 45.0%
-    prediction = "Suspicious" if prob >= 45.0 else "Legitimate"
+    # 3-tier Classification matching the Flowchart: Legitimate / Suspicious / Cheating
+    # 1. Cheating: Blatant cheats (cheat prob >= 70% or severe physical violations like sub-human reflex or 70%+ headshot clustering)
+    # 2. Suspicious: Borderline anomalies (prob 35% - 70% or any warning flag) requiring moderator review
+    # 3. Legitimate: Normal human limits (< 35% prob and 0 flags)
+    has_severe_anomaly = any(
+        "Sub-human" in f or "Severe headshot" in f or "Machine-level" in f or "violation" in f 
+        for f in anomaly_flags
+    )
 
-    if prob < 35.0:
-        risk_level = "LOW"
-    elif prob < 70.0:
+    if prob >= 70.0 or has_severe_anomaly:
+        prediction = "Cheating"
+        risk_level = "HIGH"
+    elif prob >= 35.0 or len(anomaly_flags) > 0:
+        prediction = "Suspicious"
         risk_level = "MEDIUM"
     else:
-        risk_level = "HIGH"
+        prediction = "Legitimate"
+        risk_level = "LOW"
 
     return {
         "prediction": prediction,

@@ -15,7 +15,12 @@ BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 if BASE_DIR not in sys.path:
     sys.path.insert(0, BASE_DIR)
 
-from backend.database import get_db, init_db, generate_room_code
+from backend.database import (
+    get_db, init_db, generate_room_code,
+    get_room_players, set_player_readiness,
+    set_player_online_status, update_player_score,
+    validate_room_start_conditions
+)
 from backend.prediction import predict_player_cheat, get_model_metadata
 from backend.game_sim import (
     simulate_and_evaluate_match,
@@ -28,6 +33,18 @@ static_dir = os.path.join(BASE_DIR, 'static')
 
 app = Flask(__name__, template_folder=template_dir, static_folder=static_dir)
 app.secret_key = os.environ.get('SECRET_KEY', 'multiplayer_cheat_detection_secret_2026')
+
+# Initialize Flask-SocketIO with graceful fallback
+try:
+    from flask_socketio import SocketIO, emit, join_room, leave_room
+    SOCKETIO_AVAILABLE = True
+    socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading', manage_session=False)
+except ImportError:
+    SOCKETIO_AVAILABLE = False
+    socketio = None
+    emit = None
+    join_room = None
+    leave_room = None
 
 # Initialize DB on server start
 with app.app_context():
@@ -255,7 +272,8 @@ def api_get_room_detail(room_id):
         return jsonify({"status": "error", "message": "Room not found"}), 404
 
     cur.execute("""
-        SELECT gp.id as roster_id, gp.user_id, gp.is_host, gp.is_bot, gp.player_status, gp.joined_at,
+        SELECT gp.id as roster_id, gp.user_id, gp.is_host, gp.is_bot, gp.player_status,
+               COALESCE(gp.is_online, 1) as is_online, COALESCE(gp.score, 0) as score, gp.joined_at,
                u.username, u.role, u.avatar_color
         FROM game_players gp
         JOIN users u ON gp.user_id = u.user_id
@@ -269,7 +287,13 @@ def api_get_room_detail(room_id):
     room_dict = dict(room)
     room_dict['players'] = players
     room_dict['player_count'] = len(players)
-    room_dict['can_start'] = (len(players) >= room_dict['min_players'])
+    ready_count = sum(1 for p in players if p['player_status'] == 'ready')
+    room_dict['ready_count'] = ready_count
+    
+    # Requirement: Can start only when AT LEAST 5 players are connected AND ready
+    quorum_met = len(players) >= room_dict['min_players']
+    all_ready = (len(players) > 0) and (ready_count == len(players))
+    room_dict['can_start'] = quorum_met and all_ready
     room_dict['is_current_user_host'] = (session.get('user_id') == room_dict['host_id'])
 
     return jsonify({"status": "success", "room": room_dict})
@@ -295,15 +319,22 @@ def api_join_room(room_id):
         if count >= room['max_players']:
             return jsonify({"status": "error", "message": "Room is full"}), 400
 
+        # Prevent duplicate player entries in the same room
         cur.execute("SELECT id FROM game_players WHERE room_id = ? AND user_id = ?", (room_id, user_id))
         if cur.fetchone():
             return jsonify({"status": "success", "message": "Already in room", "room_id": room_id})
 
         cur.execute("""
-            INSERT INTO game_players (room_id, user_id, is_host, is_bot, player_status)
-            VALUES (?, ?, 0, 0, 'ready')
+            INSERT INTO game_players (room_id, user_id, is_host, is_bot, player_status, is_online, score)
+            VALUES (?, ?, 0, 0, 'ready', 1, 0)
         """, (room_id, user_id))
         conn.commit()
+
+        if socketio:
+            socketio.emit('room_update', {
+                'room_id': room_id,
+                'players': get_room_players(room_id)
+            }, room=f"room_{room_id}")
 
         return jsonify({"status": "success", "message": "Joined room successfully", "room_id": room_id})
     except Exception as e:
@@ -322,24 +353,139 @@ def api_leave_room(room_id):
     try:
         cur.execute("DELETE FROM game_players WHERE room_id = ? AND user_id = ?", (room_id, user_id))
         conn.commit()
+
+        if socketio:
+            socketio.emit('room_update', {
+                'room_id': room_id,
+                'players': get_room_players(room_id)
+            }, room=f"room_{room_id}")
+
         return jsonify({"status": "success", "message": "Left room"})
     finally:
         cur.close()
         conn.close()
+
+@app.route('/api/rooms/<int:room_id>/ready', methods=['POST'])
+@login_required
+def api_toggle_player_ready(room_id):
+    """Toggles readiness status of the logged-in player."""
+    user_id = session['user_id']
+    data = request.get_json() or {}
+    
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("SELECT player_status FROM game_players WHERE room_id = ? AND user_id = ?", (room_id, user_id))
+    row = cur.fetchone()
+    if not row:
+        cur.close()
+        conn.close()
+        return jsonify({"status": "error", "message": "You are not joined to this room."}), 400
+
+    # Toggle or explicitly set
+    current_status = row['player_status']
+    new_status = 'not_ready' if current_status == 'ready' else 'ready'
+    if 'ready' in data:
+        new_status = 'ready' if data['ready'] else 'not_ready'
+
+    cur.execute("UPDATE game_players SET player_status = ? WHERE room_id = ? AND user_id = ?", (new_status, room_id, user_id))
+    conn.commit()
+    cur.close()
+    conn.close()
+
+    if socketio:
+        socketio.emit('room_update', {
+            'room_id': room_id,
+            'players': get_room_players(room_id)
+        }, room=f"room_{room_id}")
+
+    return jsonify({
+        "status": "success",
+        "player_status": new_status,
+        "is_ready": (new_status == 'ready'),
+        "user_id": user_id
+    })
+
+@app.route('/api/rooms/<int:room_id>/quick-ready', methods=['POST'])
+@login_required
+def api_quick_ready_room(room_id):
+    """Sets all players in the room to ready for seamless viva demonstration."""
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("UPDATE game_players SET player_status = 'ready' WHERE room_id = ?", (room_id,))
+    conn.commit()
+    cur.close()
+    conn.close()
+
+    players = get_room_players(room_id)
+    if socketio:
+        socketio.emit('room_update', {
+            'room_id': room_id,
+            'players': players
+        }, room=f"room_{room_id}")
+
+    return jsonify({"status": "success", "message": "All room players are now ready!", "players": players})
 
 @app.route('/api/rooms/<int:room_id>/quick-fill', methods=['POST'])
 @login_required
 def api_quick_fill_room(room_id):
     """
     Demonstration accelerator:
-    Adds players to the room to reach the required minimum 5 players in one click.
+    Adds registered test players (player2, player3, player4, player5)
+    to reach the required minimum 5 players in one click.
     """
     new_count = quick_fill_room_with_demo_players(room_id)
+    players = get_room_players(room_id)
+
+    if socketio:
+        socketio.emit('room_update', {
+            'room_id': room_id,
+            'players': players
+        }, room=f"room_{room_id}")
+
     return jsonify({
         "status": "success",
         "message": f"Room now has {new_count} players (threshold met: {new_count >= 5})",
         "player_count": new_count
     })
+
+@app.route('/api/rooms/<int:room_id>/score', methods=['POST'])
+@login_required
+def api_record_player_score(room_id):
+    """Updates real-time score for current player and broadcasts to room."""
+    data = request.get_json() or {}
+    score = int(data.get('score', 0))
+    user_id = session['user_id']
+    username = session.get('username', 'Player')
+
+    update_player_score(room_id, user_id, score)
+
+    if socketio:
+        socketio.emit('score_update', {
+            'room_id': room_id,
+            'user_id': user_id,
+            'username': username,
+            'score': score
+        }, room=f"room_{room_id}")
+
+    return jsonify({"status": "success", "score": score})
+
+@app.route('/api/rooms/<int:room_id>/scores', methods=['GET'])
+def api_get_room_scores(room_id):
+    """Returns live scoreboard for all players in room."""
+    players = get_room_players(room_id)
+    leaderboard = [
+        {
+            'user_id': p['user_id'],
+            'username': p['username'],
+            'avatar_color': p.get('avatar_color', '#6366f1'),
+            'score': p.get('score', 0),
+            'player_status': p.get('player_status', 'ready'),
+            'is_online': p.get('is_online', 1)
+        }
+        for p in players
+    ]
+    leaderboard.sort(key=lambda x: x['score'], reverse=True)
+    return jsonify({"status": "success", "scores": leaderboard})
 
 # -------------------------------------------------------------
 # 3. GAME SIMULATION & MATCH EXECUTION (MINIMUM 5 PLAYERS)
@@ -351,41 +497,34 @@ def api_start_room_game(room_id):
     Starts game room and runs ML cheat detection.
     STRICT REQUIREMENTS:
     - Only room host can start the game.
-    - Minimum 5 players required!
+    - Minimum 5 unique registered players required!
+    - All players in room must be ready!
+    - Emits game_started event to all room players simultaneously.
     """
-    conn = get_db()
-    cur = conn.cursor()
-    cur.execute("SELECT host_id, min_players FROM game_rooms WHERE room_id = ?", (room_id,))
-    room = cur.fetchone()
-    if not room:
-        cur.close()
-        conn.close()
-        return jsonify({"status": "error", "message": "Room not found"}), 404
+    user_id = session['user_id']
+    can_start, err_msg, room_dict = validate_room_start_conditions(room_id, user_id)
+    if not can_start:
+        status_code = 403 if "Permission denied" in (err_msg or "") else 400
+        return jsonify({"status": "error", "message": err_msg}), status_code
 
-    if session['user_id'] != room['host_id']:
-        cur.close()
-        conn.close()
-        return jsonify({"status": "error", "message": "Permission denied: Only the room host can start the game."}), 403
+    # Broadcast game-start event to all room participants via WebSocket
+    players = get_room_players(room_id)
+    if socketio:
+        socketio.emit('game_started', {
+            'room_id': room_id,
+            'room_name': room_dict.get('room_name', 'Championship Match'),
+            'duration': 30,
+            'players': [{'user_id': p['user_id'], 'username': p['username'], 'score': 0} for p in players]
+        }, room=f"room_{room_id}")
 
-    cur.execute("SELECT COUNT(*) as count FROM game_players WHERE room_id = ?", (room_id,))
-    player_count = cur.fetchone()['count']
-    cur.close()
-    conn.close()
-
-    if player_count < room['min_players']:
-        return jsonify({
-            "status": "error",
-            "message": f"Cannot start: Room has {player_count}/{room['min_players']} players. Minimum 5 players required!"
-        }), 400
-
-    # Execute simulation and ML inference for all 5+ room players
+    # Execute telemetry collection and ML inference for all 5+ room players
     success, result_or_err = simulate_and_evaluate_match(room_id)
     if not success:
         return jsonify({"status": "error", "message": result_or_err}), 400
 
     return jsonify({
         "status": "success",
-        "message": "Game completed & telemetry analyzed by Random Forest model!",
+        "message": "Game started & telemetry analyzed by Random Forest model!",
         "results": result_or_err
     })
 
@@ -512,6 +651,7 @@ def api_detection_dashboard():
     total_scans = len(records)
     legit_count = sum(1 for r in records if r['prediction'] == 'Legitimate')
     suspicious_count = sum(1 for r in records if r['prediction'] == 'Suspicious')
+    cheating_count = sum(1 for r in records if r['prediction'] == 'Cheating')
     avg_prob = round(sum(r['cheat_probability'] for r in records) / max(1, total_scans), 1)
 
     # 1. Bar Chart: Player vs Cheat Probability
@@ -519,18 +659,23 @@ def api_detection_dashboard():
     bar_chart = {
         "labels": [r['username'] for r in top_players],
         "probabilities": [r['cheat_probability'] for r in top_players],
-        "colors": ['#ef4444' if r['prediction'] == 'Suspicious' else '#10b981' for r in top_players]
+        "colors": [
+            '#ef4444' if r['prediction'] == 'Cheating' else
+            '#f59e0b' if r['prediction'] == 'Suspicious' else
+            '#10b981' for r in top_players
+        ],
+        "predictions": [r['prediction'] for r in top_players]
     }
 
-    # 2. Pie Chart: Legitimate vs Suspicious
+    # 2. Pie Chart: Legitimate vs Suspicious vs Cheating (Flowchart Stage H)
     pie_chart = {
-        "labels": ["Legitimate Players", "Suspicious / Flagged"],
-        "data": [legit_count, suspicious_count],
-        "colors": ["#10b981", "#ef4444"]
+        "labels": ["Legitimate Players", "Suspicious / Anomalous", "Cheating / High Risk"],
+        "data": [legit_count, suspicious_count, cheating_count],
+        "colors": ["#10b981", "#f59e0b", "#ef4444"]
     }
 
     # 3. Scatter Plot: Accuracy (%) vs Reaction Time (ms)
-    # (Shows clear clustering between human biological limits and superhuman bot snaps)
+    # (Shows clear clustering between human biological limits, anomalies, and superhuman bot snaps)
     scatter_data = []
     for r in records:
         scatter_data.append({
@@ -559,6 +704,7 @@ def api_detection_dashboard():
             "total_players": total_scans,
             "legitimate_players": legit_count,
             "suspicious_players": suspicious_count,
+            "cheating_players": cheating_count,
             "avg_cheat_probability": avg_prob
         },
         "records": records,
@@ -594,9 +740,11 @@ def api_moderator_queue():
     queue = [dict(r) for r in cur.fetchall()]
 
     # Counts
-    pending = sum(1 for q in queue if q['decision'] == 'Under Review' and q['prediction'] == 'Suspicious')
+    pending = sum(1 for q in queue if q['decision'] == 'Under Review' and q['prediction'] in ('Suspicious', 'Cheating'))
     confirmed = sum(1 for q in queue if q['decision'] == 'Confirmed Cheating')
     cleared = sum(1 for q in queue if q['decision'] == 'Legitimate')
+    cheating_flagged = sum(1 for q in queue if q['prediction'] == 'Cheating')
+    suspicious_flagged = sum(1 for q in queue if q['prediction'] == 'Suspicious')
 
     cur.close()
     conn.close()
@@ -607,7 +755,9 @@ def api_moderator_queue():
             "total_flagged": len(queue),
             "pending_review": pending,
             "confirmed_cheating": confirmed,
-            "cleared_legitimate": cleared
+            "cleared_legitimate": cleared,
+            "cheating_flagged": cheating_flagged,
+            "suspicious_flagged": suspicious_flagged
         },
         "queue": queue
     })

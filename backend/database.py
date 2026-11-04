@@ -10,7 +10,7 @@ import random
 import string
 from werkzeug.security import generate_password_hash
 
-DB_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'database', 'cheat_detection.db'))
+DB_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'database', 'multiplayer_anti_cheat.db'))
 
 def get_db():
     """Returns a thread-safe sqlite3 connection with dict-like row factory."""
@@ -19,6 +19,9 @@ def get_db():
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
     return conn
+
+# Compatibility alias for legacy test suites
+get_db_connection = get_db
 
 def init_db():
     """Initializes tables and seeds default demonstration accounts and sample rooms."""
@@ -61,6 +64,8 @@ def init_db():
                 is_host INTEGER NOT NULL DEFAULT 0,
                 is_bot INTEGER NOT NULL DEFAULT 0,
                 player_status VARCHAR(20) NOT NULL DEFAULT 'ready',
+                is_online INTEGER NOT NULL DEFAULT 1,
+                score INTEGER NOT NULL DEFAULT 0,
                 joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 UNIQUE(room_id, user_id),
                 FOREIGN KEY (room_id) REFERENCES game_rooms(room_id) ON DELETE CASCADE,
@@ -112,6 +117,20 @@ def init_db():
                 FOREIGN KEY (moderator_id) REFERENCES users(user_id) ON DELETE CASCADE
             );
         """)
+
+    # Graceful schema column migrations for existing SQLite database
+    try:
+        cur.execute("ALTER TABLE users ADD COLUMN avatar_color VARCHAR(20) DEFAULT '#6366f1'")
+    except Exception:
+        pass
+    try:
+        cur.execute("ALTER TABLE game_players ADD COLUMN is_online INTEGER NOT NULL DEFAULT 1")
+    except Exception:
+        pass
+    try:
+        cur.execute("ALTER TABLE game_players ADD COLUMN score INTEGER NOT NULL DEFAULT 0")
+    except Exception:
+        pass
 
     conn.commit()
 
@@ -167,5 +186,109 @@ def generate_room_code(length=6):
     code = ''.join(random.choices(chars, k=length))
     return f"ROOM-{code[:4]}"
 
+def get_room_players(room_id):
+    """Fetches all players in a room with their online and readiness status."""
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT gp.id as roster_id, gp.user_id, gp.is_host, gp.is_bot,
+               gp.player_status, gp.is_online, gp.score, gp.joined_at,
+               u.username, u.role, u.avatar_color
+        FROM game_players gp
+        JOIN users u ON gp.user_id = u.user_id
+        WHERE gp.room_id = ?
+        ORDER BY gp.is_host DESC, gp.joined_at ASC
+    """, (room_id,))
+    players = [dict(p) for p in cur.fetchall()]
+    cur.close()
+    conn.close()
+    return players
+
+def set_player_readiness(room_id, user_id, is_ready):
+    """Updates a player's readiness status ('ready' or 'not_ready')."""
+    status = 'ready' if is_ready else 'not_ready'
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("""
+        UPDATE game_players
+        SET player_status = ?
+        WHERE room_id = ? AND user_id = ?
+    """, (status, room_id, user_id))
+    conn.commit()
+    cur.close()
+    conn.close()
+    return status
+
+def set_player_online_status(user_id, is_online=1):
+    """Updates user online status across all their active rooms."""
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("""
+        UPDATE game_players
+        SET is_online = ?
+        WHERE user_id = ?
+    """, (1 if is_online else 0, user_id))
+    conn.commit()
+    cur.close()
+    conn.close()
+
+def update_player_score(room_id, user_id, score):
+    """Updates real-time score for player in active room."""
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("""
+        UPDATE game_players
+        SET score = ?
+        WHERE room_id = ? AND user_id = ?
+    """, (score, room_id, user_id))
+    conn.commit()
+    cur.close()
+    conn.close()
+
+def validate_room_start_conditions(room_id, requesting_user_id):
+    """
+    Strict validation for starting a match:
+    1. Room must exist.
+    2. Requesting user must be the room host.
+    3. At least 5 connected players must be in the room.
+    4. ALL players in the room must be in 'ready' status.
+    Returns: (can_start: bool, error_message: str or None, room_dict)
+    """
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM game_rooms WHERE room_id = ?", (room_id,))
+    room = cur.fetchone()
+    if not room:
+        cur.close()
+        conn.close()
+        return False, "Room not found", None
+
+    room_dict = dict(room)
+    if room_dict['host_id'] != requesting_user_id:
+        cur.close()
+        conn.close()
+        return False, "Permission denied: Only the room host can start the game.", room_dict
+
+    cur.execute("""
+        SELECT gp.user_id, gp.player_status, gp.is_online, u.username
+        FROM game_players gp
+        JOIN users u ON gp.user_id = u.user_id
+        WHERE gp.room_id = ?
+    """, (room_id,))
+    players = [dict(p) for p in cur.fetchall()]
+    cur.close()
+    conn.close()
+
+    player_count = len(players)
+    if player_count < room_dict['min_players']:
+        return False, f"Cannot start: Room has {player_count}/{room_dict['min_players']} players. Minimum 5 players required!", room_dict
+
+    not_ready_players = [p['username'] for p in players if p['player_status'] != 'ready']
+    if not_ready_players:
+        return False, f"Cannot start: Waiting for readiness from {len(not_ready_players)} player(s): {', '.join(not_ready_players)}", room_dict
+
+    return True, None, room_dict
+
 if __name__ == '__main__':
     init_db()
+

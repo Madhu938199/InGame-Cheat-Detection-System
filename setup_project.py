@@ -30,13 +30,13 @@ def build_project():
 
     if not os.path.exists(model_path) or not os.path.exists(dataset_path):
         print("Model or dataset missing. Running ml/train_rf_model.py...")
-        from ml.train_rf_model import generate_synthetic_dataset, train_random_forest_pipeline
-        df = generate_synthetic_dataset(n_samples=3500)
-        train_random_forest_pipeline(df)
-        print("✓ Random Forest classifier and dataset generated successfully.")
+        from ml.train_rf_model import generate_multiplayer_dataset, train_random_forest_model
+        generate_multiplayer_dataset()
+        train_random_forest_model()
+        print("[OK] Random Forest classifier and dataset generated successfully.")
     else:
-        print(f"✓ Random Forest model verified at: {model_path}")
-        print(f"✓ Multiplayer dataset verified at: {dataset_path}")
+        print(f"[OK] Random Forest model verified at: {model_path}")
+        print(f"[OK] Multiplayer dataset verified at: {dataset_path}")
 
     # 2. Database Build & Seeding
     print("\n[Step 2/3] Initializing SQLite Relational Database & Seed Data...")
@@ -56,19 +56,19 @@ def build_project():
         room_id = r['room_id'] if r else 1
         quick_fill_room_with_demo_players(room_id)
         simulate_and_evaluate_match(room_id)
-        print("✓ Initial 5-player tournament match evaluated by ML and seeded into database.")
+        print("[OK] Initial 5-player tournament match evaluated by ML and seeded into database.")
     else:
-        print(f"✓ Relational database verified with {scans} historical telemetry records.")
+        print(f"[OK] Relational database verified with {scans} historical telemetry records.")
     cur.close()
     conn.close()
 
     # 3. System Verification Summary
     print("\n[Step 3/3] Build Verification & System Readiness...")
-    print("✓ Flask REST Backend:     backend/app.py")
-    print("✓ React SPA & Dark Theme: templates/index.html")
-    print("✓ Modular React Frontend: frontend/src/")
-    print("✓ SQLite Database:        database/multiplayer_anti_cheat.db")
-    print("✓ ML Model & Scaler:      ml/model/random_forest_cheat_detector.pkl")
+    print("[OK] Flask REST Backend:     backend/app.py")
+    print("[OK] React SPA & Dark Theme: templates/index.html")
+    print("[OK] Modular React Frontend: frontend/src/")
+    print("[OK] SQLite Database:        database/multiplayer_anti_cheat.db")
+    print("[OK] ML Model & Scaler:      ml/model/random_forest_cheat_detector.pkl")
 
     print("\n" + "=" * 80)
     print(" BUILD SUCCESSFUL! HOW TO RUN THE WEBSITE:")
@@ -78,9 +78,9 @@ def build_project():
     print("2. Open your web browser at:")
     print("      http://127.0.0.1:5000")
     print("\nDefault Demo Accounts (Password: password123):")
-    print("   • Host / Player:  player1")
-    print("   • Participants:   player2, player3, player4, player5")
-    print("   • Human Auditor:  moderator1")
+    print("   * Host / Player:  player1")
+    print("   * Participants:   player2, player3, player4, player5")
+    print("   * Human Auditor:  moderator1")
     print("=" * 80)
 
 if __name__ == '__main__':
