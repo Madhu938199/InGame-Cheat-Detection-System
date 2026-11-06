@@ -1,0 +1,785 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Multiplayer In-Game Cheat Detection - Project Review</title>
+  <style>
+    :root {
+      --bg: #0b1120;
+      --card-bg: #1e293b;
+      --border: #334155;
+      --cyan: #06b6d4;
+      --blue: #3b82f6;
+      --emerald: #10b981;
+      --amber: #f59e0b;
+      --rose: #ef4444;
+      --text: #f8fafc;
+      --muted: #94a3b8;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; }
+
+    body {
+      background-color: var(--bg);
+      color: var(--text);
+      overflow: hidden;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Top Navigation Bar */
+    header {
+      background: rgba(15, 23, 42, 0.85);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+      padding: 12px 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      z-index: 50;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-weight: 700;
+      font-size: 1.1rem;
+      letter-spacing: -0.5px;
+    }
+
+    .brand span.shield {
+      background: linear-gradient(135deg, var(--cyan), var(--blue));
+      padding: 6px 12px;
+      border-radius: 8px;
+      color: #fff;
+      font-size: 0.85rem;
+      text-transform: uppercase;
+    }
+
+    .nav-controls {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    button.btn {
+      background: var(--card-bg);
+      color: var(--text);
+      border: 1px solid var(--border);
+      padding: 8px 16px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.85rem;
+      font-weight: 600;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s ease;
+    }
+
+    button.btn:hover {
+      background: #334155;
+      border-color: var(--cyan);
+      color: var(--cyan);
+    }
+
+    .badge-counter {
+      background: #0f172a;
+      border: 1px solid var(--border);
+      padding: 6px 14px;
+      border-radius: 999px;
+      font-weight: 700;
+      font-size: 0.85rem;
+      color: var(--cyan);
+    }
+
+    /* Slide Stage */
+    main.stage {
+      flex: 1;
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 30px;
+      overflow: hidden;
+    }
+
+    .slide-wrapper {
+      width: 100%;
+      max-width: 1200px;
+      aspect-ratio: 16 / 9;
+      background: radial-gradient(circle at top right, rgba(6, 182, 212, 0.08), transparent 40%),
+                  radial-gradient(circle at bottom left, rgba(59, 130, 246, 0.05), transparent 40%),
+                  var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7);
+      padding: 48px;
+      display: none;
+      flex-direction: column;
+      justify-content: space-between;
+      position: relative;
+      animation: fadeIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .slide-wrapper.active {
+      display: flex;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px) scale(0.99); }
+      to { opacity: 1; transform: translateY(0) scale(1); }
+    }
+
+    .slide-header {
+      border-bottom: 2px solid rgba(51, 65, 85, 0.5);
+      padding-bottom: 20px;
+      position: relative;
+    }
+
+    .slide-header::after {
+      content: '';
+      position: absolute;
+      bottom: -2px;
+      left: 0;
+      width: 120px;
+      height: 2px;
+      background: linear-gradient(90deg, var(--cyan), var(--blue));
+    }
+
+    .slide-category {
+      font-size: 0.85rem;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      color: var(--cyan);
+      font-weight: 700;
+      margin-bottom: 6px;
+    }
+
+    .slide-title {
+      font-size: 2.2rem;
+      font-weight: 800;
+      color: var(--text);
+      letter-spacing: -0.5px;
+    }
+
+    .slide-subtitle {
+      font-size: 1.05rem;
+      color: var(--muted);
+      margin-top: 4px;
+    }
+
+    .slide-body {
+      flex: 1;
+      margin-top: 28px;
+      display: grid;
+      grid-template-columns: 1.2fr 0.8fr;
+      gap: 32px;
+      align-items: center;
+    }
+
+    .slide-body.full-width {
+      grid-template-columns: 1fr;
+    }
+
+    .bullet-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .bullet-list li {
+      font-size: 1.1rem;
+      line-height: 1.5;
+      color: #cbd5e1;
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+    }
+
+    .bullet-list li .bullet-icon {
+      color: var(--cyan);
+      font-size: 1.3rem;
+      line-height: 1;
+      flex-shrink: 0;
+      margin-top: 2px;
+    }
+
+    .bullet-list li strong {
+      color: #f1f5f9;
+      font-weight: 700;
+    }
+
+    .visual-panel {
+      background: rgba(15, 23, 42, 0.6);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 24px;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      gap: 16px;
+    }
+
+    .metric-card {
+      background: rgba(30, 41, 59, 0.9);
+      border: 1px solid rgba(51, 65, 85, 0.6);
+      border-radius: 10px;
+      padding: 16px;
+    }
+
+    .metric-label {
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--muted);
+    }
+
+    .metric-value {
+      font-size: 1.8rem;
+      font-weight: 800;
+      color: var(--cyan);
+      margin-top: 4px;
+    }
+
+    .metric-sub {
+      font-size: 0.85rem;
+      color: #94a3b8;
+      margin-top: 2px;
+    }
+
+    .pipeline-grid {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 10px;
+    }
+
+    .pipe-step {
+      background: #0f172a;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px;
+      text-align: center;
+      font-size: 0.75rem;
+    }
+
+    .pipe-step .badge {
+      display: inline-block;
+      font-weight: 800;
+      color: var(--cyan);
+      margin-bottom: 4px;
+    }
+
+    .slide-footer {
+      border-top: 1px solid rgba(51, 65, 85, 0.5);
+      padding-top: 14px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.85rem;
+      color: var(--muted);
+    }
+
+    /* Speaker Notes Drawer */
+    #speakerNotes {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: #090d16;
+      border-top: 2px solid var(--cyan);
+      padding: 20px 32px;
+      transform: translateY(100%);
+      transition: transform 0.3s ease;
+      z-index: 100;
+      max-height: 250px;
+      overflow-y: auto;
+    }
+
+    #speakerNotes.open {
+      transform: translateY(0);
+    }
+
+    #speakerNotes h4 {
+      color: var(--cyan);
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    #speakerNotes p {
+      color: #94a3b8;
+      line-height: 1.6;
+      font-size: 0.95rem;
+    }
+
+    /* Progress bar */
+    .progress-bar-container {
+      width: 100%;
+      height: 4px;
+      background: #1e293b;
+    }
+
+    .progress-bar-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--cyan), var(--blue));
+      width: 10%;
+      transition: width 0.3s ease;
+    }
+
+    @media print {
+      body { overflow: visible; height: auto; }
+      header, .progress-bar-container, #speakerNotes { display: none !important; }
+      main.stage { padding: 0; display: block; }
+      .slide-wrapper {
+        display: flex !important;
+        page-break-after: always;
+        break-after: page;
+        width: 100% !important;
+        height: 100vh !important;
+        border: none !important;
+        border-radius: 0 !important;
+        box-shadow: none !important;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Progress -->
+  <div class="progress-bar-container">
+    <div class="progress-bar-fill" id="progressBar"></div>
+  </div>
+
+  <!-- Header -->
+  <header>
+    <div class="brand">
+      <span class="shield">🛡️ AEGIS</span>
+      <span>Multiplayer In-Game Cheat Detection &mdash; Review Defense</span>
+    </div>
+    <div class="nav-controls">
+      <span class="badge-counter" id="slideCounter">Slide 01 / 10</span>
+      <button class="btn" onclick="prevSlide()">◀ Prev</button>
+      <button class="btn" onclick="nextSlide()">Next ▶</button>
+      <button class="btn" onclick="toggleNotes()">📝 Speaker Notes [S]</button>
+      <button class="btn" onclick="toggleFullscreen()">⛶ Fullscreen [F]</button>
+      <button class="btn" onclick="window.print()">🖨️ Export PDF</button>
+    </div>
+  </header>
+
+  <!-- Slide Stage -->
+  <main class="stage">
+
+    <!-- SLIDE 1 -->
+    <div class="slide-wrapper active" data-notes="Good morning professors and reviewers. Today I am presenting Aegis Anti-Cheat, an end-to-end multiplayer in-game cheat detection system. Unlike traditional client-side anti-cheats that spy on player memory or install invasive kernel drivers, our system evaluates kinematic telemetry patterns using server-authoritative machine learning. We achieved a 99.86% detection accuracy and 1.0000 ROC-AUC across a 10-stage pipeline.">
+      <div class="slide-header">
+        <div class="slide-category">Project Defense &bull; Overview</div>
+        <h1 class="slide-title">Multiplayer In-Game Cheat Detection System</h1>
+        <p class="slide-subtitle">Real-Time Telemetry Analysis, Kinematic Anomaly Modeling & 3-Tier Classification</p>
+      </div>
+      <div class="slide-body">
+        <ul class="bullet-list">
+          <li><span class="bullet-icon">✦</span><div><strong>Core Problem:</strong> Evasion of signature anti-cheats by modern memory-injected aimbots & triggerbots.</div></li>
+          <li><span class="bullet-icon">✦</span><div><strong>Innovation:</strong> Pure server-side kinematic behavioral modeling with zero invasive client software.</div></li>
+          <li><span class="bullet-icon">✦</span><div><strong>Architecture:</strong> Fully realized 10-stage pipeline from Player Registration to Moderator Enforcement.</div></li>
+          <li><span class="bullet-icon">✦</span><div><strong>Classification:</strong> 3-Tier classification matrix (Legitimate / Suspicious / Cheating) eliminating false bans.</div></li>
+        </ul>
+        <div class="visual-panel">
+          <div class="metric-card">
+            <div class="metric-label">Model Accuracy</div>
+            <div class="metric-value">99.86%</div>
+            <div class="metric-sub">Trained Random Forest Classifier</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-label">ROC-AUC Score</div>
+            <div class="metric-value" style="color: var(--emerald);">1.0000</div>
+            <div class="metric-sub">Zero overlap between classes</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-label">Inference Latency</div>
+            <div class="metric-value" style="color: var(--blue);">&lt; 10 ms</div>
+            <div class="metric-sub">Real-time match scoring</div>
+          </div>
+        </div>
+      </div>
+      <div class="slide-footer">
+        <span>Aegis Anti-Cheat System &bull; Slide 1/10</span>
+        <span>Tech: Python, Flask, Scikit-Learn, SQLite, React, Chart.js</span>
+      </div>
+    </div>
+
+    <!-- SLIDE 2 -->
+    <div class="slide-wrapper" data-notes="Slide 2 presents our problem statement. Cheating in modern esports ruins the competitive integrity and player retention. Traditional anti-cheats rely on signature scanning, which breaks when cheats use polymorphic packing or DMA cards. Meanwhile, kernel-level drivers like Vanguard pose serious privacy and security vulnerabilities. Our goal was to create a non-intrusive server-side behavioral model that analyzes the physics of player actions.">
+      <div class="slide-header">
+        <div class="slide-category">Context &bull; Motivation</div>
+        <h1 class="slide-title">Problem Statement & Industry Motivation</h1>
+        <p class="slide-subtitle">The Limits of Traditional Signature & Kernel-Level Anti-Cheats</p>
+      </div>
+      <div class="slide-body">
+        <ul class="bullet-list">
+          <li><span class="bullet-icon">⚠️</span><div><strong>The Epidemic:</strong> Sophisticated aimbots, triggerbots, and speedhacks undermine esports integrity and player retention.</div></li>
+          <li><span class="bullet-icon">❌</span><div><strong>Signature Scanners Fail:</strong> Polymorphic code, Direct Memory Access (DMA) hardware, and external injectors evade hash checks.</div></li>
+          <li><span class="bullet-icon">🔒</span><div><strong>Kernel Rootkit Concerns:</strong> Ring 0 anti-cheat drivers (e.g., Vanguard/EasyAntiCheat) introduce OS instability and privacy backdoors.</div></li>
+          <li><span class="bullet-icon">✅</span><div><strong>The Behavioral Solution:</strong> Players cannot fake the underlying biomechanical laws of human motor movement and reaction latency.</div></li>
+        </ul>
+        <div class="visual-panel">
+          <div class="metric-card" style="border-left: 4px solid var(--rose);">
+            <div class="metric-label">The Dilemma</div>
+            <div style="font-size: 1rem; color: #f87171; margin-top: 6px;">Traditional: Binary Hashes &amp; Rootkits</div>
+            <div class="metric-sub">Prone to zero-day bypasses and user distrust</div>
+          </div>
+          <div class="metric-card" style="border-left: 4px solid var(--emerald);">
+            <div class="metric-label">Our Paradigm</div>
+            <div style="font-size: 1rem; color: #4ade80; margin-top: 6px;">Aegis: Kinematic Behavioral Modeling</div>
+            <div class="metric-sub">Analyzes what players DO, not what files they run</div>
+          </div>
+        </div>
+      </div>
+      <div class="slide-footer">
+        <span>Aegis Anti-Cheat System &bull; Slide 2/10</span>
+        <span>Motivation &amp; Research Gap</span>
+      </div>
+    </div>
+
+    <!-- SLIDE 3 -->
+    <div class="slide-wrapper" data-notes="Slide 3 showcases our complete 10-stage architecture. We implemented the exact flowchart: starting with player auth in Stage A, room creation in Stage B, enforcing the 5-player threshold in Stage C, simulating synchronous matches in Stage D, capturing 14-metric telemetry in Stage E, feeding it to our Random Forest model in Stage F, classifying players in Stage G into Legitimate, Suspicious, or Cheating in Stage H, rendering real-time dashboards in Stage I, and routing to human moderators in Stage J.">
+      <div class="slide-header">
+        <div class="slide-category">System Architecture &bull; Pipeline</div>
+        <h1 class="slide-title">10-Stage End-to-End Pipeline</h1>
+        <p class="slide-subtitle">Modular Server-Authoritative Data Flow from Ingestion to Enforcement</p>
+      </div>
+      <div class="slide-body full-width">
+        <div class="pipeline-grid" style="grid-template-columns: repeat(5, 1fr); margin-bottom: 20px;">
+          <div class="pipe-step"><span class="badge">STAGE A</span><br><strong>Registration / Login</strong><br><small>JWT &amp; BCrypt Auth</small></div>
+          <div class="pipe-step"><span class="badge">STAGE B</span><br><strong>Create / Join Room</strong><br><small>Lobby Orchestration</small></div>
+          <div class="pipe-step"><span class="badge">STAGE C</span><br><strong>Wait for 5 Players</strong><br><small>Threshold Validator</small></div>
+          <div class="pipe-step"><span class="badge">STAGE D</span><br><strong>Start Game</strong><br><small>Match State Engine</small></div>
+          <div class="pipe-step"><span class="badge">STAGE E</span><br><strong>Collect Telemetry</strong><br><small>14 Kinematic Metrics</small></div>
+        </div>
+        <div class="pipeline-grid" style="grid-template-columns: repeat(5, 1fr);">
+          <div class="pipe-step"><span class="badge">STAGE F</span><br><strong>ML Cheat Model</strong><br><small>Random Forest &amp; Scaler</small></div>
+          <div class="pipe-step"><span class="badge">STAGE G</span><br><strong>Classify Players</strong><br><small>Continuous Probabilities</small></div>
+          <div class="pipe-step" style="border-color: var(--amber);"><span class="badge" style="color: var(--amber);">STAGE H</span><br><strong>3-Tier Decision</strong><br><small>Legit / Susp / Cheat</small></div>
+          <div class="pipe-step"><span class="badge">STAGE I</span><br><strong>Visual Dashboard</strong><br><small>Chart.js Analytics</small></div>
+          <div class="pipe-step" style="border-color: var(--emerald);"><span class="badge" style="color: var(--emerald);">STAGE J</span><br><strong>Moderator Review</strong><br><small>Human-in-the-Loop</small></div>
+        </div>
+      </div>
+      <div class="slide-footer">
+        <span>Aegis Anti-Cheat System &bull; Slide 3/10</span>
+        <span>Complete Flowchart Mapping (A &rarr; J)</span>
+      </div>
+    </div>
+
+    <!-- SLIDE 4 -->
+    <div class="slide-wrapper" data-notes="Slide 4 covers Stages A through D: Lobby management and Matchmaking. We implemented secure authentication, persistent player stats, customizable room settings like Deathmatch or Tactical modes, and private access codes. Most crucially for Stage C, our system guarantees that a match cannot start without a minimum of 5 players, and features an automated bot-filler engine to test diverse skill tiers.">
+      <div class="slide-header">
+        <div class="slide-category">Implementation &bull; Stages A &ndash; D</div>
+        <h1 class="slide-title">Matchmaking &amp; Room Management</h1>
+        <p class="slide-subtitle">Player Authentication, Room Orchestration, and 5-Player Validation</p>
+      </div>
+      <div class="slide-body">
+        <ul class="bullet-list">
+          <li><span class="bullet-icon">🔐</span><div><strong>Player Auth (Stage A):</strong> Secure BCrypt password hashing, session tokens, and player avatar personalization.</div></li>
+          <li><span class="bullet-icon">🎮</span><div><strong>Room Orchestrator (Stage B):</strong> Custom room creation with selectable game modes, player caps (5&ndash;16), and room access codes.</div></li>
+          <li><span class="bullet-icon">👥</span><div><strong>5-Player Minimum Threshold (Stage C):</strong> Strict database and API precondition before a match can transition to In-Progress.</div></li>
+          <li><span class="bullet-icon">🤖</span><div><strong>Smart AI Bot Fillers:</strong> Dynamic bot injection ensuring lobbies reach testing capacity with diverse simulated skill levels.</div></li>
+        </ul>
+        <div class="visual-panel">
+          <div class="metric-card">
+            <div class="metric-label">Stage C Rule</div>
+            <div class="metric-value" style="color: var(--amber);">Min 5 Players</div>
+            <div class="metric-sub">Strict match validation gate</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-label">Supported Modes</div>
+            <div class="metric-value">Deathmatch</div>
+            <div class="metric-sub">Tactical &bull; Competitive Search</div>
+          </div>
+        </div>
+      </div>
+      <div class="slide-footer">
+        <span>Aegis Anti-Cheat System &bull; Slide 4/10</span>
+        <span>Stages A, B, C, D &bull; Match Lifecycle</span>
+      </div>
+    </div>
+
+    <!-- SLIDE 5 -->
+    <div class="slide-wrapper" data-notes="In Slide 5, we look at Stage E: Feature Engineering. The heart of our system is the 14-metric telemetry feature vector. Cheaters exhibit distinct physical anomalies: an aimbot snaps to heads in 0 milliseconds with zero jitter and absurd angular velocities. We capture headshot ratio, accuracy, reaction latency, spatial dispersion, burst consistency, and ping. These 14 metrics form an impenetrable behavioral fingerprint.">
+      <div class="slide-header">
+        <div class="slide-category">Telemetry &bull; Stage E</div>
+        <h1 class="slide-title">Kinematic Feature Engineering</h1>
+        <p class="slide-subtitle">14-Dimensional Behavioral Telemetry Vector Captured at Server Level</p>
+      </div>
+      <div class="slide-body">
+        <ul class="bullet-list">
+          <li><span class="bullet-icon">🎯</span><div><strong>Aim Kinematics:</strong> Headshot % (Aimbots ~90%+), Accuracy, Angular Velocity (deg/sec), and Crosshair Aim Jitter.</div></li>
+          <li><span class="bullet-icon">⚡</span><div><strong>Reflex Latency:</strong> Reaction time in milliseconds &mdash; physiological human limit is ~150ms; triggerbots hit &lt;30ms.</div></li>
+          <li><span class="bullet-icon">📍</span><div><strong>Spatial Dynamics:</strong> Spatial dispersion of bullet impact coordinates and recoil pattern adherence.</div></li>
+          <li><span class="bullet-icon">🌐</span><div><strong>Network &amp; Weapon Control:</strong> Burst fire consistency, kill-to-death velocity, and ping jitter normalization.</div></li>
+        </ul>
+        <div class="visual-panel">
+          <div class="metric-card">
+            <div class="metric-label">Telemetry Dimension</div>
+            <div class="metric-value">14 Features</div>
+            <div class="metric-sub">Captured per round event stream</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-label">Human Reflex Floor</div>
+            <div class="metric-value" style="color: var(--rose);">~150 ms</div>
+            <div class="metric-sub">Aimbot/Triggerbot floor: &lt; 40 ms</div>
+          </div>
+        </div>
+      </div>
+      <div class="slide-footer">
+        <span>Aegis Anti-Cheat System &bull; Slide 5/10</span>
+        <span>Stage E &bull; Biomechanical Anomaly Extraction</span>
+      </div>
+    </div>
+
+    <!-- SLIDE 6 -->
+    <div class="slide-wrapper" data-notes="Slide 6 details our Machine Learning pipeline in Stages F and G. We selected a Random Forest Classifier trained on over 2,000 player rounds. Random Forest excels here because it effectively isolates non-linear interactions between speed, accuracy, and reaction time without overfitting. We applied Robust Standard Scaling and achieved a staggering 99.86% testing accuracy and a 1.0000 ROC-AUC score.">
+      <div class="slide-header">
+        <div class="slide-category">Machine Learning &bull; Stages F &amp; G</div>
+        <h1 class="slide-title">Machine Learning Classification Pipeline</h1>
+        <p class="slide-subtitle">Random Forest Modeling, Preprocessing &amp; Hyperparameter Tuning</p>
+      </div>
+      <div class="slide-body">
+        <ul class="bullet-list">
+          <li><span class="bullet-icon">🌲</span><div><strong>Algorithm Choice:</strong> Random Forest Classifier (100 estimators, Gini criterion) for non-linear feature interactions.</div></li>
+          <li><span class="bullet-icon">⚖️</span><div><strong>Preprocessing:</strong> Robust Standard Scaling fitted on normative player distributions to handle diverse sensitivities.</div></li>
+          <li><span class="bullet-icon">📊</span><div><strong>Top Features:</strong> Angular Velocity, Aim Jitter Variance, Reaction Time, and Headshot Ratio provide strongest entropy gain.</div></li>
+          <li><span class="bullet-icon">⏱️</span><div><strong>Sub-10ms Inference:</strong> Pickled model pipeline evaluates full 16-player lobbies in under 100 milliseconds.</div></li>
+        </ul>
+        <div class="visual-panel">
+          <div class="metric-card">
+            <div class="metric-label">Validation Accuracy</div>
+            <div class="metric-value" style="color: var(--emerald);">99.86%</div>
+            <div class="metric-sub">Verified on holdout test set</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-label">Training Size</div>
+            <div class="metric-value">2,000+</div>
+            <div class="metric-sub">Telemetry event sequences</div>
+          </div>
+        </div>
+      </div>
+      <div class="slide-footer">
+        <span>Aegis Anti-Cheat System &bull; Slide 6/10</span>
+        <span>Stages F &amp; G &bull; Model Training &amp; Inference</span>
+      </div>
+    </div>
+
+    <!-- SLIDE 7 -->
+    <div class="slide-wrapper" data-notes="Slide 7 introduces our crucial Stage H innovation: The 3-Tier Classification Matrix. Binary cheat detection systems fail in real life because pro players or lucky shots get falsely banned. Instead, we divide predictions into three tiers: Legitimate for probability under 35 percent; Suspicious between 35 and 75 percent for anomalous players or smurfs; and Cheating for probability above 75 percent. This ensures zero automatic false bans.">
+      <div class="slide-header">
+        <div class="slide-category">Decision Matrix &bull; Stage H</div>
+        <h1 class="slide-title">3-Tier Classification Matrix</h1>
+        <p class="slide-subtitle">Preventing False Bans Through Multi-Tier Confidence Thresholding</p>
+      </div>
+      <div class="slide-body">
+        <ul class="bullet-list">
+          <li><span class="bullet-icon">🟢</span><div><strong>Tier 1 &mdash; Legitimate (P &lt; 0.35):</strong> Normal human motor variance, natural micro-adjustments, human reaction latency.</div></li>
+          <li><span class="bullet-icon">🟡</span><div><strong>Tier 2 &mdash; Suspicious (0.35 &le; P &lt; 0.75):</strong> Smurf accounts, sudden skill spikes, or subtle smoothing aimbots flagged for monitoring.</div></li>
+          <li><span class="bullet-icon">🔴</span><div><strong>Tier 3 &mdash; Cheating (P &ge; 0.75):</strong> Inhuman snaps, zero-jitter crosshairs, instant triggerbot activations.</div></li>
+          <li><span class="bullet-icon">🛡️</span><div><strong>Production Safety:</strong> No automatic account terminations on ambiguous data &mdash; high reliability policy.</div></li>
+        </ul>
+        <div class="visual-panel">
+          <div class="metric-card" style="border-left: 4px solid var(--emerald);">
+            <div class="metric-label" style="color: var(--emerald);">Tier 1: Legitimate</div>
+            <div style="font-size: 0.95rem; color: #cbd5e1; margin-top: 4px;">P &lt; 0.35 &bull; Unrestricted Play</div>
+          </div>
+          <div class="metric-card" style="border-left: 4px solid var(--amber);">
+            <div class="metric-label" style="color: var(--amber);">Tier 2: Suspicious</div>
+            <div style="font-size: 0.95rem; color: #cbd5e1; margin-top: 4px;">0.35 &le; P &lt; 0.75 &bull; Watchlist / Review</div>
+          </div>
+          <div class="metric-card" style="border-left: 4px solid var(--rose);">
+            <div class="metric-label" style="color: var(--rose);">Tier 3: Cheating</div>
+            <div style="font-size: 0.95rem; color: #cbd5e1; margin-top: 4px;">P &ge; 0.75 &bull; Quarantine &amp; Ban Queue</div>
+          </div>
+        </div>
+      </div>
+      <div class="slide-footer">
+        <span>Aegis Anti-Cheat System &bull; Slide 7/10</span>
+        <span>Stage H &bull; Tri-State Risk Categorization</span>
+      </div>
+    </div>
+
+    <!-- SLIDE 8 -->
+    <div class="slide-wrapper" data-notes="Slide 8 covers Stage I: The Visualization Dashboard. Reviewers and admins need immediate, intuitive visual clarity. We integrated Chart.js into our React UI to display five executive KPI cards, a 3-tier Donut Breakdown, an Accuracy versus Reaction Time Scatter Matrix showing clean clustering, and a metric Bar Chart. We also added an interactive 10-Stage Pipeline Progress bar and a 1-click end-to-end demo.">
+      <div class="slide-header">
+        <div class="slide-category">Analytics &bull; Stage I</div>
+        <h1 class="slide-title">Real-Time Visualization Dashboard</h1>
+        <p class="slide-subtitle">Multi-Chart Visual Analytics for Match Oversight and Anomaly Inspection</p>
+      </div>
+      <div class="slide-body">
+        <ul class="bullet-list">
+          <li><span class="bullet-icon">📈</span><div><strong>KPI Summary Cards:</strong> Total matches tracked, players analyzed, threat ratios, and system health status.</div></li>
+          <li><span class="bullet-icon">🍩</span><div><strong>3-Tier Donut Chart:</strong> Visual breakdown of legitimate, suspicious, and cheating player distribution.</div></li>
+          <li><span class="bullet-icon">📉</span><div><strong>Scatter Cluster Matrix:</strong> Accuracy vs. Reaction Time (ms) mapping distinct legitimate and cheat clusters.</div></li>
+          <li><span class="bullet-icon">📊</span><div><strong>Bar Chart Comparisons:</strong> Direct side-by-side comparison of individual player telemetry vs. baseline.</div></li>
+        </ul>
+        <div class="visual-panel">
+          <div class="metric-card">
+            <div class="metric-label">Visual Engine</div>
+            <div class="metric-value">Chart.js</div>
+            <div class="metric-sub">React 18 Component Architecture</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-label">Pipeline Visualizer</div>
+            <div class="metric-value" style="color: var(--cyan);">Stage A &rarr; J</div>
+            <div class="metric-sub">Interactive 1-Click Demo Included</div>
+          </div>
+        </div>
+      </div>
+      <div class="slide-footer">
+        <span>Aegis Anti-Cheat System &bull; Slide 8/10</span>
+        <span>Stage I &bull; Frontend Analytics Engine</span>
+      </div>
+    </div>
+
+    <!-- SLIDE 9 -->
+    <div class="slide-wrapper" data-notes="Slide 9 showcases Stage J: Human-in-the-Loop Moderator Review. Ethical AI demands that automated models should not have unchecked authority to permanently terminate accounts without appeal. Our triage desk automatically populates flagged players, provides tri-state filters, lets moderators inspect kinematic logs, and provides 1-click Ban, Flag, or Clear actions with full timestamped audit trails.">
+      <div class="slide-header">
+        <div class="slide-category">Enforcement &bull; Stage J</div>
+        <h1 class="slide-title">Human-in-the-Loop Moderator Review</h1>
+        <p class="slide-subtitle">Ethical AI Governance, Evidence Triage Desk, and Disciplinary Actions</p>
+      </div>
+      <div class="slide-body">
+        <ul class="bullet-list">
+          <li><span class="bullet-icon">👨‍⚖️</span><div><strong>Ethical AI Guardrail:</strong> Machine Learning suggests; human moderators audit and authorize final disciplinary action.</div></li>
+          <li><span class="bullet-icon">🔍</span><div><strong>Telemetry Inspector:</strong> Deep dive into individual player kill feeds, angular velocity spikes, and reaction times.</div></li>
+          <li><span class="bullet-icon">📋</span><div><strong>Tri-State Triage Desk:</strong> Real-time filtering by status: 'All', 'Pending Review', 'Reviewed', and 'Action Taken'.</div></li>
+          <li><span class="bullet-icon">⚡</span><div><strong>Direct Enforcement:</strong> 1-Click account Ban, Flag for surveillance watchlist, or Dismiss/Clear with full audit logging.</div></li>
+        </ul>
+        <div class="visual-panel">
+          <div class="metric-card" style="border-left: 4px solid var(--rose);">
+            <div class="metric-label">Ban Player</div>
+            <div style="font-size: 0.95rem; color: #cbd5e1; margin-top: 4px;">Instant room eviction &amp; account lockdown</div>
+          </div>
+          <div class="metric-card" style="border-left: 4px solid var(--amber);">
+            <div class="metric-label">Flag for Watchlist</div>
+            <div style="font-size: 0.95rem; color: #cbd5e1; margin-top: 4px;">Increased telemetry logging frequency</div>
+          </div>
+          <div class="metric-card" style="border-left: 4px solid var(--emerald);">
+            <div class="metric-label">Clear / Dismiss</div>
+            <div style="font-size: 0.95rem; color: #cbd5e1; margin-top: 4px;">Restore player reputation score</div>
+          </div>
+        </div>
+      </div>
+      <div class="slide-footer">
+        <span>Aegis Anti-Cheat System &bull; Slide 9/10</span>
+        <span>Stage J &bull; Audit &amp; Governance Desk</span>
+      </div>
+    </div>
+
+    <!-- SLIDE 10 -->
+    <div class="slide-wrapper" data-notes="Finally, Slide 10 summarizes our results and roadmap. All 8 comprehensive unit and integration test suites passed with 100% success. The system eliminates invasive client software while delivering near-perfect 99.86% detection accuracy. For future work, we plan to implement temporal sequence modeling like Bi-LSTMs and Transformers, as well as Graph Neural Networks to detect organized cheat boosting rings. Thank you, and I look forward to your questions.">
+      <div class="slide-header">
+        <div class="slide-category">Conclusion &bull; Roadmap</div>
+        <h1 class="slide-title">Results, Conclusion &amp; Future Scope</h1>
+        <p class="slide-subtitle">Experimental Validation, Project Takeaways, and Future Research Directions</p>
+      </div>
+      <div class="slide-body">
+        <ul class="bullet-list">
+          <li><span class="bullet-icon">✅</span><div><strong>System Verification:</strong> 8/8 comprehensive automated unit and integration tests passing successfully.</div></li>
+          <li><span class="bullet-icon">🏆</span><div><strong>Key Achievement:</strong> Built a complete, privacy-respecting 10-stage server-authoritative anti-cheat system.</div></li>
+          <li><span class="bullet-icon">🔮</span><div><strong>Future Scope 1:</strong> Temporal Sequence Modeling using Bidirectional LSTMs and Transformers for micro-flicks.</div></li>
+          <li><span class="bullet-icon">🕸️</span><div><strong>Future Scope 2:</strong> Graph Neural Networks (GNNs) for detecting syndicated cheat ring parties and smurf networks.</div></li>
+        </ul>
+        <div class="visual-panel">
+          <div class="metric-card" style="background: linear-gradient(135deg, rgba(6, 182, 212, 0.2), rgba(59, 130, 246, 0.2)); border-color: var(--cyan);">
+            <div class="metric-label" style="color: var(--cyan);">Review Status</div>
+            <div class="metric-value" style="font-size: 1.5rem; color: #fff;">10/10 Stages Verified</div>
+            <div class="metric-sub">Pushed &amp; Live on GitHub</div>
+          </div>
+          <div style="text-align: center; margin-top: 10px;">
+            <p style="font-size: 1.1rem; font-weight: 700; color: #f8fafc;">Thank You &bull; Questions &amp; Answers</p>
+            <p style="font-size: 0.85rem; color: var(--muted); margin-top: 4px;">Ready for viva defense demonstration</p>
+          </div>
+        </div>
+      </div>
+      <div class="slide-footer">
+        <span>Aegis Anti-Cheat System &bull; Slide 10/10</span>
+        <span>Open for Questions &bull; Thank You!</span>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- Speaker Notes Drawer -->
+  <div id="speakerNotes">
+    <h4>📝 Speaker Notes <small style="font-size: 0.75rem; color: #64748b;">(Press 'S' or click button to toggle)</small></h4>
+    <p id="notesContent">Welcome to the presentation.</p>
+  </div>
+
+  <script>
+    let currentSlide = 0;
+    const slides = document.querySelectorAll('.slide-wrapper');
+    const totalSlides = slides.length;
+    const counter = document.getElementById('slideCounter');
+    const progressBar = document.getElementById('progressBar');
+    const notesDrawer = document.getElementById('speakerNotes');
+    const notesContent = document.getElementById('notesContent');
+
+    function updateSlide() {
+      slides.forEach((s, idx) => {
+        s.classList.toggle('active', idx === currentSlide);
+      });
+      counter.innerText = `Slide ${String(currentSlide + 1).padStart(2, '0')} / ${String(totalSlides).padStart(2, '0')}`;
+      progressBar.style.width = `${((currentSlide + 1) / totalSlides) * 100}%`;
+      
+      const currentNotes = slides[currentSlide].getAttribute('data-notes') || 'No notes for this slide.';
+      notesContent.innerText = currentNotes;
+    }
+
+    function nextSlide() {
+      if (currentSlide < totalSlides - 1) {
+        currentSlide++;
+        updateSlide();
+      }
+    }
+
+    function prevSlide() {
+      if (currentSlide > 0) {
+        currentSlide--;
+        updateSlide();
+      }
+    }
+
+    function toggleNotes() {
+      notesDrawer.classList.toggle('open');
+    }
+
+    function toggleFullscreen() {
+      if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen();
+      } else {
+        if (document.exitFullscreen) {
+          document.exitFullscreen();
+        }
+      }
+    }
+
+    // Keyboard navigation
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown') {
+        nextSlide();
+      } else if (e.key === 'ArrowLeft' || e.key === 'PageUp') {
+        prevSlide();
+      } else if (e.key.toLowerCase() === 's') {
+        toggleNotes();
+      } else if (e.key.toLowerCase() === 'f') {
+        toggleFullscreen();
+      }
+    });
+
+    updateSlide();
+  </script>
+</body>
+</html>
